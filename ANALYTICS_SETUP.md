@@ -227,7 +227,13 @@ Browser-level verification — DebugView, the network panel, mobile share and co
 
 ## 7. Known limitations
 
-- **Nothing is wired up yet.** `analytics.js` is complete and tested, but no component calls it, because the Phase 4 application source is not in this repository — only the built `index.html`. Section 3 is the map to apply once the source is committed.
+- **Nothing is wired up yet.** `analytics.js` is complete and tested, but no component calls it, because the Phase 4 application source is not in this repository — only the built `index.html`. Section 3 is the map to apply once the source is committed. Before wiring anything into a candidate tree, check it is the right generation:
+
+  ```bash
+  node scripts/verify-source-generation.mjs src index.html
+  ```
+
+  It compares the Supabase RPC surface and generation markers between the tree and the deployed build, and exits non-zero if they disagree. `seruh-source.zip` fails it — that tree calls `submit_feeling` and is missing twelve RPCs the live build uses, including `publish_feeling`, `report_feeling` and the whole moderation admin. Building from it would roll production back past the DEFECT 2 fix.
 - **Netlify Analytics cannot be enabled from code.** It is a dashboard toggle and a paid add-on, and it does not backfill.
 - **Netlify unique visitors are IP-based** and are not a count of people.
 - **GA4 undercounts.** Ad-blockers and privacy browsers block `gtag.js`; Netlify's edge counting does not miss those visits. Expect GA4 Users to sit below Netlify unique visitors, and do not treat the gap as a bug.
