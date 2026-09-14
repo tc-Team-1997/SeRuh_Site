@@ -1,0 +1,14 @@
+# SeRuh — deep links
+#
+# Only these patterns are rewritten to the app. Everything else keeps
+# returning 404 on purpose: a catch-all 200 turns every typo into a
+# soft 404 that search engines then have to judge.
+#
+# Hash routes (#/admin, #/me) are untouched — a fragment never
+# reaches the server, so nothing here can capture them.
+
+/q/*        /index.html   200
+/f/*        /index.html   200
+/mood/*     /index.html   200
+/c/*        /index.html   200
+/daily      /index.html   200
