@@ -10,7 +10,8 @@ Two problems, both fixed without touching the application source.
 | --- | --- |
 | `netlify/edge-functions/share-preview.js` | Injects Open Graph + Twitter tags per path, at the edge |
 | `netlify/lib/share-meta.mjs` | The pure logic — path parsing, card text, HTML injection |
-| `netlify/lib/share-meta.test.mjs` | 40 assertions, `node netlify/lib/share-meta.test.mjs` |
+| `netlify/lib/share-meta.test.mjs` | 40 assertions on the pure logic |
+| `netlify/lib/share-preview.integration.test.mjs` | 30 assertions on the handler itself |
 | `_redirects` | `/q/:id`, `/f/:id`, `/mood/:m`, `/c/:slug`, `/daily` serve the app |
 | `robots.txt` | Crawl guidance, points at the sitemap |
 | `sitemap.xml` | 62 URLs, generated |
@@ -72,7 +73,7 @@ It reads Supabase config out of `index.html`, so it needs no environment. Re-run
 This function sits in front of **every HTML response**, so its failure mode is a site outage rather than a missing tag. Four guards:
 
 - One `try/catch` around the whole handler returns the original response on any error.
-- The upstream read has its own `try/catch` and a 1.5 s `AbortSignal.timeout`; a slow database yields a generic card, never a slow page.
+- The upstream read has its own `try/catch`, a 1.5 s `AbortSignal.timeout`, **and** a `Promise.race` deadline. The signal alone only bounds the request if the runtime's fetch honours it; integration testing caught the handler hanging against an upstream that ignored the signal, so the bound no longer rests on that assumption.
 - Paths needing no content — `/`, `/mood/*`, `/c/*` — make no upstream call at all.
 - A non-HTML response is passed straight through untouched.
 
@@ -89,9 +90,12 @@ Content is escaped for attribute context before injection. Test section 6 pushes
 Run before and after any change here:
 
 ```bash
-node netlify/lib/share-meta.test.mjs     # 40 assertions
-node scripts/generate-sitemap.mjs --dry  # asserts, writes nothing
+node netlify/lib/share-meta.test.mjs                  # 40 assertions, pure logic
+node netlify/lib/share-preview.integration.test.mjs   # 30 assertions, the handler
+node scripts/generate-sitemap.mjs --dry               # asserts, writes nothing
 ```
+
+The integration suite imports `share-preview.js` unmodified and shims only `Deno.env`, so what it exercises is what ships: a real wall post end to end, the homepage making no upstream call, missing configuration, four kinds of upstream failure, non-HTML and 404 pass-through, hostile paths, and an assertion that `/f/:id` reads `feelings_public` and never the `feelings` table.
 
 Checked explicitly, because these are the ways this change could break the existing product:
 
@@ -101,6 +105,6 @@ Checked explicitly, because these are the ways this change could break the exist
 | Unknown paths becoming soft 404s | **Avoided** — no `/*` rule, so a typo still returns a real 404. |
 | Injection corrupting the page | Asserted: exactly one `<title>`, one description, body and charset untouched, tags inside `<head>`. Dry-run against the live 777 KB bundle grew it by 1,262 bytes with the root div intact. |
 | Private content previewed or indexed | Public views only, in both the function and the generator. |
-| Edge function failing the site | Returns the original response on any error; verified by the malformed-input assertions. |
+| Edge function failing the site | Returns the original response on any error; a hanging upstream is bounded twice over. Verified against a stub that ignores the abort signal. |
 
 After deploying, confirm by hand: the homepage still loads, `#/admin` still reaches the admin panel, and `#/me` still opens My SeRuh.

@@ -28,6 +28,18 @@ export const config = {
 
 const UPSTREAM_TIMEOUT_MS = 1500
 
+// AbortSignal.timeout only bounds the request if the runtime's fetch
+// honours it. This handler runs in front of every HTML response, so
+// the bound should not rest on that assumption: race the read against
+// a timer as well, and take whichever finishes first.
+function withDeadline(promise, ms) {
+  let t
+  return Promise.race([
+    promise.finally(() => clearTimeout(t)),
+    new Promise((resolve) => { t = setTimeout(() => resolve(null), ms) }),
+  ])
+}
+
 // The anon key is public by design — it ships inside the page — so
 // reading it from the environment is configuration, not a secret.
 // Falls back to skipping the content read rather than failing.
@@ -74,7 +86,7 @@ export default async function handler(request, context) {
 
     let item = null
     try {
-      item = await fetchItem(target)
+      item = await withDeadline(fetchItem(target), UPSTREAM_TIMEOUT_MS)
     } catch {
       // timeout, network, bad JSON — fall through to the generic card
       item = null
