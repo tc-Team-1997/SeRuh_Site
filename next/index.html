@@ -1,0 +1,701 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Seruh — Say what you can't say out loud</title>
+<meta name="description" content="Anonymous thoughts. Real feelings. No judgment. Seruh is a quiet place to say the things you can't say out loud — and to find out you're not the only one who feels that way.">
+<link rel="canonical" href="https://seruh.netlify.app/next">
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="Seruh">
+<meta property="og:title" content="Seruh — Say what you can't say out loud">
+<meta property="og:description" content="Anonymous thoughts. Real feelings. No judgment.">
+<meta property="og:url" content="https://seruh.netlify.app/next">
+<meta name="twitter:card" content="summary">
+<meta name="theme-color" content="#F6F4F8" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#131119" media="(prefers-color-scheme: dark)">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600&family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap">
+<style>
+/* ── Twilight. One palette that holds from afternoon to 3am, because
+      Seruh After Dark is a brand pillar, not a toggle. ───────────── */
+:root{
+  --ground:#F6F4F8; --card:#FFFFFF; --sunk:#EFEBF3;
+  --ink:#221E2B; --soft:#6B6478; --faint:#9A93A8; --line:#E4DFEA;
+  --dusk:#574A87; --dusk-soft:#EDE9F7;
+  --ember:#C25A3E; --ember-soft:#FBEDE8;
+  --shadow:0 1px 2px rgba(34,30,43,.04), 0 8px 24px -12px rgba(34,30,43,.14);
+  --r:18px;
+}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
+  --ground:#131119; --card:#1C1922; --sunk:#171520;
+  --ink:#EDE9F2; --soft:#A79FB4; --faint:#7D7589; --line:#2E2938;
+  --dusk:#9B8AD4; --dusk-soft:#241F33;
+  --ember:#E6875F; --ember-soft:#2B1E1A;
+  --shadow:0 1px 2px rgba(0,0,0,.3), 0 8px 28px -14px rgba(0,0,0,.7);
+}}
+:root[data-theme="dark"]{
+  --ground:#131119; --card:#1C1922; --sunk:#171520;
+  --ink:#EDE9F2; --soft:#A79FB4; --faint:#7D7589; --line:#2E2938;
+  --dusk:#9B8AD4; --dusk-soft:#241F33;
+  --ember:#E6875F; --ember-soft:#2B1E1A;
+  --shadow:0 1px 2px rgba(0,0,0,.3), 0 8px 28px -14px rgba(0,0,0,.7);
+}
+
+*{box-sizing:border-box}
+html{-webkit-text-size-adjust:100%}
+body{
+  margin:0; background:var(--ground); color:var(--ink);
+  font-family:"Plus Jakarta Sans",system-ui,-apple-system,sans-serif;
+  font-size:16px; line-height:1.6; -webkit-font-smoothing:antialiased;
+  overflow-x:hidden;
+}
+.thought{font-family:"Fraunces","Iowan Old Style",Georgia,serif; font-optical-sizing:auto}
+button,input,select,textarea{font:inherit; color:inherit}
+button{cursor:pointer; background:none; border:0}
+a{color:var(--dusk)}
+:focus-visible{outline:2px solid var(--dusk); outline-offset:3px; border-radius:6px}
+@media (prefers-reduced-motion:reduce){*,*::before,*::after{animation-duration:.01ms!important;transition-duration:.01ms!important}}
+
+.wrap{max-width:640px; margin:0 auto; padding:0 20px}
+section{scroll-margin-top:72px}
+.eyebrow{font-size:.72rem; font-weight:700; letter-spacing:.14em; text-transform:uppercase; color:var(--faint); margin:0 0 .6rem}
+h2{font-size:1.35rem; font-weight:600; letter-spacing:-.02em; margin:0 0 .3rem}
+.sub{color:var(--soft); font-size:.94rem; margin:0 0 1.2rem}
+
+/* ── header ─────────────────────────────────────────────── */
+header{position:sticky; top:0; z-index:40; background:color-mix(in srgb,var(--ground) 88%,transparent); backdrop-filter:blur(12px); border-bottom:1px solid var(--line)}
+.bar{max-width:640px; margin:0 auto; padding:12px 20px; display:flex; align-items:center; gap:14px}
+.logo{font-family:"Fraunces",serif; font-weight:600; font-size:1.18rem; letter-spacing:-.02em; margin-right:auto}
+.logo span{color:var(--dusk)}
+.navlink{display:none; font-size:.88rem; font-weight:500; color:var(--soft); text-decoration:none; padding:6px 2px}
+.navlink:hover{color:var(--ink)}
+@media(min-width:720px){.navlink{display:inline}}
+.icon-btn{width:38px; height:38px; border-radius:50%; display:grid; place-items:center; color:var(--soft)}
+.icon-btn:hover{background:var(--sunk); color:var(--ink)}
+
+/* ── hero ───────────────────────────────────────────────── */
+.hero{padding:56px 0 34px; text-align:center; position:relative}
+.hero::before{content:""; position:absolute; inset:-10% -40% 40%; background:radial-gradient(60% 55% at 50% 0%,var(--dusk-soft),transparent 70%); z-index:-1}
+h1{font-family:"Fraunces",serif; font-weight:500; font-size:clamp(2.05rem,8vw,2.9rem); line-height:1.1; letter-spacing:-.025em; margin:0 0 .7rem; text-wrap:balance}
+.hero p{color:var(--soft); font-size:1.02rem; margin:0 auto 1.6rem; max-width:24rem; text-wrap:balance}
+.cta-row{display:flex; flex-direction:column; gap:10px; align-items:stretch; max-width:20rem; margin:0 auto}
+@media(min-width:520px){.cta-row{flex-direction:row; justify-content:center; max-width:none}}
+.btn{border-radius:999px; padding:14px 26px; font-weight:600; font-size:.95rem; transition:transform .16s,box-shadow .2s,background .2s; white-space:nowrap}
+.btn:active{transform:scale(.97)}
+.btn-primary{background:var(--dusk); color:#fff; box-shadow:0 6px 18px -8px var(--dusk)}
+.btn-primary:hover{filter:brightness(1.08)}
+.btn-ghost{border:1px solid var(--line); color:var(--soft); background:var(--card)}
+.btn-ghost:hover{border-color:var(--dusk); color:var(--ink)}
+.reassure{margin-top:1.5rem; font-size:.84rem; color:var(--faint)}
+
+/* ── composer ───────────────────────────────────────────── */
+.composer{background:var(--card); border:1px solid var(--line); border-radius:var(--r); padding:18px; box-shadow:var(--shadow)}
+.composer textarea{
+  width:100%; border:0; background:transparent; resize:vertical; min-height:104px;
+  font-family:"Fraunces",serif; font-size:1.08rem; line-height:1.55; padding:2px 0 10px;
+}
+.composer textarea::placeholder{color:var(--faint); font-style:italic}
+.composer textarea:focus{outline:none}
+.chips{display:flex; gap:7px; overflow-x:auto; padding:2px 0 10px; scrollbar-width:none; -webkit-overflow-scrolling:touch}
+.chips::-webkit-scrollbar{display:none}
+.chip{border:1px solid var(--line); background:var(--card); border-radius:999px; padding:7px 13px; font-size:.83rem; font-weight:500; color:var(--soft); white-space:nowrap; transition:.16s}
+.chip:hover{border-color:var(--dusk)}
+.chip[aria-pressed="true"]{background:var(--dusk-soft); border-color:var(--dusk); color:var(--dusk); font-weight:600}
+.composer-foot{display:flex; align-items:center; gap:10px; border-top:1px solid var(--line); padding-top:12px; margin-top:4px}
+.count{font-size:.78rem; color:var(--faint); margin-left:auto; font-variant-numeric:tabular-nums}
+.hp{position:absolute; left:-9999px; width:1px; height:1px; overflow:hidden}
+
+/* ── thought cards ──────────────────────────────────────── */
+.feed{display:flex; flex-direction:column; gap:14px}
+.card{background:var(--card); border:1px solid var(--line); border-radius:var(--r); padding:20px; box-shadow:var(--shadow); animation:rise .5s cubic-bezier(.22,1,.36,1) both}
+@keyframes rise{from{opacity:0; transform:translateY(10px)}to{opacity:1; transform:none}}
+.card blockquote{margin:0 0 14px; font-size:1.08rem; line-height:1.6; white-space:pre-line; letter-spacing:-.005em}
+.meta{display:flex; flex-wrap:wrap; gap:8px; align-items:center; font-size:.76rem; color:var(--faint); margin-bottom:12px}
+.tag{background:var(--sunk); border-radius:999px; padding:3px 9px; font-weight:600; color:var(--soft)}
+.actions{display:flex; gap:4px; align-items:center; border-top:1px solid var(--line); padding-top:12px; margin:0 -4px}
+.act{display:inline-flex; align-items:center; gap:6px; padding:9px 11px; border-radius:11px; font-size:.83rem; font-weight:600; color:var(--soft); transition:.16s; min-height:40px}
+.act:hover{background:var(--sunk); color:var(--ink)}
+.act .n{font-variant-numeric:tabular-nums}
+.act-feel[aria-pressed="true"]{color:var(--ember); background:var(--ember-soft)}
+.act-feel.pulse{animation:pulse .5s cubic-bezier(.22,1,.36,1)}
+@keyframes pulse{0%{transform:scale(1)}35%{transform:scale(1.16)}100%{transform:scale(1)}}
+.act-more{margin-left:auto}
+
+/* ── empty states ───────────────────────────────────────── */
+.empty{text-align:center; padding:40px 20px; border:1px dashed var(--line); border-radius:var(--r); background:var(--card)}
+.empty p{margin:0 0 4px; font-family:"Fraunces",serif; font-size:1.1rem}
+.empty span{color:var(--faint); font-size:.9rem; display:block; margin-bottom:16px}
+
+/* ── daily / random / dark ──────────────────────────────── */
+.panel{border-radius:var(--r); padding:24px 22px; border:1px solid var(--line); background:var(--card); box-shadow:var(--shadow)}
+.panel-dusk{background:linear-gradient(160deg,var(--dusk-soft),var(--card) 70%)}
+.panel-night{background:linear-gradient(165deg,#241F33,#1A1724); border-color:#332C45; color:#EDE9F2}
+.panel-night .sub,.panel-night .eyebrow{color:#A79FB4}
+.panel q{display:block; font-family:"Fraunces",serif; font-size:1.2rem; line-height:1.5; margin:0 0 16px; quotes:none}
+.panel q::before,.panel q::after{content:""}
+
+/* ── bottom nav (mobile) ────────────────────────────────── */
+.tabbar{
+  position:fixed; left:0; right:0; bottom:0; z-index:50; display:flex;
+  background:color-mix(in srgb,var(--card) 94%,transparent); backdrop-filter:blur(14px);
+  border-top:1px solid var(--line); padding:6px 4px calc(6px + env(safe-area-inset-bottom));
+}
+@media(min-width:720px){.tabbar{display:none}}
+.tab{flex:1; display:flex; flex-direction:column; align-items:center; gap:3px; padding:7px 2px; font-size:.66rem; font-weight:600; color:var(--faint); text-decoration:none; border-radius:12px; min-height:48px}
+.tab[aria-current="page"]{color:var(--dusk)}
+.tab-share{color:#fff!important}
+.tab-share .bubble{background:var(--dusk); width:44px; height:44px; border-radius:50%; display:grid; place-items:center; margin-top:-16px; box-shadow:0 8px 20px -8px var(--dusk)}
+
+/* ── sheet / modal ──────────────────────────────────────── */
+.scrim{position:fixed; inset:0; background:rgba(20,17,26,.5); backdrop-filter:blur(3px); z-index:60; opacity:0; pointer-events:none; transition:opacity .22s}
+.scrim.on{opacity:1; pointer-events:auto}
+.sheet{
+  position:fixed; left:0; right:0; bottom:0; z-index:61; background:var(--card);
+  border-radius:24px 24px 0 0; padding:22px 20px calc(22px + env(safe-area-inset-bottom));
+  transform:translateY(102%); transition:transform .3s cubic-bezier(.22,1,.36,1);
+  max-height:92vh; overflow-y:auto; box-shadow:0 -10px 40px -16px rgba(0,0,0,.4);
+}
+.sheet.on{transform:none}
+@media(min-width:640px){
+  .sheet{left:50%; right:auto; bottom:auto; top:50%; width:min(560px,92vw); border-radius:22px; transform:translate(-50%,-46%) scale(.97); opacity:0}
+  .sheet.on{transform:translate(-50%,-50%) scale(1); opacity:1}
+}
+.sheet h3{margin:0 0 14px; font-size:1.05rem; font-weight:600}
+.grab{width:38px; height:4px; background:var(--line); border-radius:9px; margin:-8px auto 14px}
+@media(min-width:640px){.grab{display:none}}
+.opt{display:block; width:100%; text-align:left; padding:13px 14px; border-radius:12px; border:1px solid var(--line); margin-bottom:8px; font-size:.92rem; font-weight:500; transition:.15s}
+.opt:hover{border-color:var(--dusk); background:var(--sunk)}
+
+/* ── toast ──────────────────────────────────────────────── */
+#toast{position:fixed; left:50%; bottom:96px; transform:translate(-50%,16px); z-index:80;
+  background:var(--ink); color:var(--ground); padding:12px 18px; border-radius:999px;
+  font-size:.87rem; font-weight:600; opacity:0; pointer-events:none; transition:.26s; max-width:88vw; text-align:center}
+#toast.on{opacity:1; transform:translate(-50%,0)}
+
+/* ── privacy + footer ───────────────────────────────────── */
+.safety{border:1px solid var(--line); border-radius:var(--r); padding:22px; background:var(--sunk)}
+.safety ul{margin:12px 0 0; padding-left:1.1rem; color:var(--soft); font-size:.9rem}
+.safety li{margin:.35rem 0}
+footer{padding:36px 0 120px; text-align:center; color:var(--faint); font-size:.82rem}
+@media(min-width:720px){footer{padding-bottom:48px}}
+.skip{position:absolute; left:-9999px}
+.skip:focus{left:20px; top:10px; z-index:100; background:var(--card); padding:10px 16px; border-radius:10px; border:1px solid var(--dusk)}
+.sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
+</style>
+</head>
+<body>
+<a class="skip" href="#feed">Skip to thoughts</a>
+
+<header>
+  <div class="bar">
+    <div class="logo">Ser<span>uh</span></div>
+    <a class="navlink" href="#feed">Home</a>
+    <a class="navlink" href="#explore">Explore</a>
+    <a class="navlink" href="#daily">Today's Seruh</a>
+    <button class="icon-btn" id="themeBtn" aria-label="Switch between light and dark">◐</button>
+  </div>
+</header>
+
+<main>
+  <!-- 1. hero -->
+  <section class="hero wrap">
+    <h1>Say what you can't<br>say out loud.</h1>
+    <p>Anonymous thoughts. Real feelings. No judgment.</p>
+    <div class="cta-row">
+      <button class="btn btn-primary" data-open-composer>Share a thought</button>
+      <a class="btn btn-ghost" href="#feed" style="text-decoration:none;display:inline-block;text-align:center">Read what others are feeling</a>
+    </div>
+    <p class="reassure">You don't have to be okay here.</p>
+  </section>
+
+  <!-- 2. composer -->
+  <section class="wrap" id="write" style="margin-bottom:44px">
+    <div class="composer">
+      <label class="sr" for="body">What's on your mind?</label>
+      <textarea id="body" maxlength="1000" placeholder="Write whatever you can't say out loud…"></textarea>
+      <div class="chips" role="group" aria-label="How does it feel?" id="moodChips"></div>
+      <div class="chips" role="group" aria-label="What is it about?" id="catChips"></div>
+      <p class="hp"><label>Leave this empty <input id="hp" tabindex="-1" autocomplete="off"></label></p>
+      <div class="composer-foot">
+        <button class="btn btn-primary" id="postBtn" style="padding:11px 20px;font-size:.9rem">Share anonymously</button>
+        <span class="count" id="count">0 / 1000</span>
+      </div>
+    </div>
+  </section>
+
+  <!-- 3. today's thoughts -->
+  <section class="wrap" id="feed" style="margin-bottom:44px">
+    <p class="eyebrow">Today's Thoughts</p>
+    <h2>What people are carrying</h2>
+    <p class="sub">Written by people who didn't want to say it anywhere else.</p>
+    <div class="feed" id="feedList" aria-live="polite"></div>
+  </section>
+
+  <!-- 4. explore by feeling -->
+  <section class="wrap" id="explore" style="margin-bottom:44px">
+    <p class="eyebrow">Explore by feeling</p>
+    <h2>Find the ones that sound like you</h2>
+    <p class="sub">Pick a feeling. The thoughts below will follow it.</p>
+    <div class="chips" role="group" aria-label="Filter by feeling" id="exploreChips"></div>
+  </section>
+
+  <!-- 5. today's seruh -->
+  <section class="wrap" id="daily" style="margin-bottom:44px">
+    <div class="panel panel-dusk">
+      <p class="eyebrow">Today's Seruh</p>
+      <div id="dailyBox"></div>
+    </div>
+  </section>
+
+  <!-- 6. random -->
+  <section class="wrap" style="margin-bottom:44px">
+    <div class="panel">
+      <p class="eyebrow">Give me a thought</p>
+      <q id="randomQ">…</q>
+      <div style="display:flex;gap:8px;flex-wrap:wrap">
+        <button class="btn btn-ghost" id="randomBtn" style="padding:10px 18px;font-size:.88rem">🎲 Another thought</button>
+      </div>
+    </div>
+  </section>
+
+  <!-- 7. after dark -->
+  <section class="wrap" id="dark" style="margin-bottom:44px">
+    <div class="panel panel-night">
+      <p class="eyebrow">🌙 Seruh After Dark</p>
+      <h2 style="color:#EDE9F2">Still awake?</h2>
+      <p class="sub" style="margin-bottom:16px">You don't have to explain everything. Just say what's on your mind.</p>
+      <div class="feed" id="darkList"></div>
+    </div>
+  </section>
+
+  <!-- 8. privacy -->
+  <section class="wrap" style="margin-bottom:44px">
+    <div class="safety">
+      <p class="eyebrow">Privacy &amp; safety</p>
+      <h2>What we do and don't know about you</h2>
+      <ul>
+        <li>You can write without an account. We never ask for your name.</li>
+        <li>Your browser keeps a random id so you can find and delete your own posts. It isn't linked to you, and clearing your browser data clears it.</li>
+        <li>No followers, no follower counts, nothing to win.</li>
+        <li>Every thought is screened automatically before it appears, and anyone can report one.</li>
+        <li>You can delete anything you wrote, at any time.</li>
+      </ul>
+      <p class="sub" style="margin:14px 0 0;font-size:.85rem">Seruh is a place to be heard — not a substitute for professional care. If you're in danger, please reach out to someone who can help right now.</p>
+    </div>
+  </section>
+</main>
+
+<footer class="wrap">
+  <p style="font-family:Fraunces,serif;font-size:1rem;color:var(--soft);margin:0 0 6px">You're not the only one who feels that way.</p>
+  <p style="margin:0">Seruh — say what you can't say out loud.</p>
+</footer>
+
+<nav class="tabbar" aria-label="Primary">
+  <a class="tab" href="#feed" aria-current="page"><span aria-hidden="true">🏠</span>Home</a>
+  <a class="tab" href="#explore"><span aria-hidden="true">🧭</span>Explore</a>
+  <button class="tab tab-share" data-open-composer aria-label="Share a thought"><span class="bubble" aria-hidden="true">✎</span></button>
+  <a class="tab" href="#daily"><span aria-hidden="true">✨</span>Today</a>
+  <a class="tab" href="#dark"><span aria-hidden="true">🌙</span>Dark</a>
+</nav>
+
+<div class="scrim" id="scrim"></div>
+<div class="sheet" id="sheet" role="dialog" aria-modal="true" aria-labelledby="sheetTitle">
+  <div class="grab"></div>
+  <h3 id="sheetTitle">…</h3>
+  <div id="sheetBody"></div>
+</div>
+<div id="toast" role="status" aria-live="polite"></div>
+
+<script type="module">
+/* ═══════════════════════════════════════════════════════════════
+   Seruh — a working front end, not a mockup.
+   No framework and no build step: the whole product is one file
+   talking to Supabase over REST. That keeps it fast on a slow phone,
+   which is where most of this will be read.
+   ═══════════════════════════════════════════════════════════════ */
+
+const SUPABASE_URL = 'https://stowxeobdtvhapkzsvaq.supabase.co';
+const SUPABASE_KEY = 'sb_publishable_TolsckXYt02Y9zydXVy8ZQ_64XaJ-FO';
+
+/* This project's PostgREST default exposed schema is not `public`, so
+   every request names it explicitly. Without this each call 404s. */
+const SCHEMA = 'public';
+
+const MOODS = [
+  ['Sad','😔'],['Lonely','🥺'],['Overthinking','🧠'],['Love','❤️'],['Heartbreak','💔'],
+  ['Angry','😡'],['Peaceful','😌'],['Hopeful','✨'],['Confused','😵'],['Missing someone','🫂'],
+];
+
+/* ── identity ───────────────────────────────────────────────────
+   A random id in this browser. It exists so you can find and delete
+   your own posts — nothing more. */
+const visitorId = (() => {
+  try {
+    let v = localStorage.getItem('seruh_visitor_id');
+    if (!v || !/^[0-9a-f-]{36}$/i.test(v)) { v = crypto.randomUUID(); localStorage.setItem('seruh_visitor_id', v); }
+    return v;
+  } catch { return crypto.randomUUID(); }
+})();
+
+const store = {
+  get(k, d) { try { return JSON.parse(localStorage.getItem(k)) ?? d } catch { return d } },
+  set(k, v) { try { localStorage.setItem(k, JSON.stringify(v)) } catch {} },
+};
+
+/* ── api ────────────────────────────────────────────────────────
+   Feature detection rather than assumption: parts of the backend
+   ship migration by migration, and a 404 here means "not switched on
+   yet", not "broken". Anything unavailable hides itself instead of
+   showing a dead control. */
+const caps = { reactions: null, prompts: null };
+
+async function rest(path, { method = 'GET', body } = {}) {
+  const res = await fetch(`${SUPABASE_URL}/rest/v1/${path}`, {
+    method,
+    headers: {
+      apikey: SUPABASE_KEY,
+      'Content-Type': 'application/json',
+      [method === 'GET' ? 'Accept-Profile' : 'Content-Profile']: SCHEMA,
+    },
+    body: body ? JSON.stringify(body) : undefined,
+  });
+  if (!res.ok) { const e = new Error(`${path} → ${res.status}`); e.status = res.status; throw e; }
+  return res.status === 204 ? null : res.json();
+}
+const rpc = (fn, args = {}) => rest(`rpc/${fn}`, { method: 'POST', body: args });
+
+const api = {
+  wall: (limit = 12, mood = null) =>
+    rest(`feelings_public?select=id,content,category,mood,display_name,created_at,like_count`
+       + `${mood ? `&mood=eq.${encodeURIComponent(mood)}` : ''}&order=created_at.desc&limit=${limit}`),
+  categories: () => rest('categories_public?select=name&order=sort'),
+  random: (exclude = null) => rpc('get_random_quote', { p_exclude: exclude }),
+  post: (p) => rpc('publish_feeling', {
+    p_title: null, p_content: p.content, p_category: p.category, p_mood: p.mood,
+    p_visibility: 'ANONYMOUS', p_name: null, p_visitor: visitorId, p_honey: p.honey || '',
+  }),
+  report: (id, reason) => rpc('report_feeling', { p_feeling: id, p_visitor: visitorId, p_reason: reason }),
+  async feel(id) {
+    if (caps.reactions !== false) {
+      try { const r = await rpc('toggle_feeling_reaction', { p_feeling: id, p_visitor: visitorId, p_reaction: 'NOT_ALONE' });
+            caps.reactions = true; return r; }
+      catch (e) { if (e.status === 404) caps.reactions = false; else throw e; }
+    }
+    return rpc('toggle_feeling_like', { p_feeling: id, p_visitor: visitorId });
+  },
+  async daily() {
+    try { const p = await rpc('get_todays_prompt'); caps.prompts = !!p; return p; }
+    catch { caps.prompts = false; return null; }
+  },
+};
+
+/* ── ui helpers ─────────────────────────────────────────────── */
+const $ = (s, r = document) => r.querySelector(s);
+const el = (t, p = {}, ...kids) => { const n = Object.assign(document.createElement(t), p); kids.flat().forEach(k => k != null && n.append(k)); return n; };
+let toastT;
+function toast(msg) {
+  const t = $('#toast'); t.textContent = msg; t.classList.add('on');
+  clearTimeout(toastT); toastT = setTimeout(() => t.classList.remove('on'), 3000);
+}
+function when(iso) {
+  const d = (Date.now() - new Date(iso)) / 6e4;
+  if (d < 1) return 'just now';
+  if (d < 60) return `${Math.floor(d)}m ago`;
+  if (d < 1440) return `${Math.floor(d / 60)}h ago`;
+  if (d < 10080) return `${Math.floor(d / 1440)}d ago`;
+  return new Date(iso).toLocaleDateString(undefined, { day: 'numeric', month: 'short' });
+}
+
+/* ── sheet ──────────────────────────────────────────────────── */
+let lastFocus = null;
+function openSheet(title, node) {
+  lastFocus = document.activeElement;
+  $('#sheetTitle').textContent = title;
+  $('#sheetBody').replaceChildren(node);
+  $('#sheet').classList.add('on'); $('#scrim').classList.add('on');
+  ($('#sheet button, #sheet a') || $('#sheet')).focus?.();
+}
+function closeSheet() {
+  $('#sheet').classList.remove('on'); $('#scrim').classList.remove('on');
+  lastFocus?.focus?.();
+}
+$('#scrim').addEventListener('click', closeSheet);
+addEventListener('keydown', e => { if (e.key === 'Escape') closeSheet(); });
+
+/* ── thought card ───────────────────────────────────────────── */
+const feltIds = new Set(store.get('seruh_felt', []));
+
+function card(t, { night = false } = {}) {
+  const felt = feltIds.has(t.id);
+  const n = el('span', { className: 'n', textContent: String(t.like_count ?? 0) });
+
+  const feelBtn = el('button', {
+    className: 'act act-feel', type: 'button',
+    title: 'I feel this too', 'aria-label': 'I feel this too',
+  }, '🫂 ', el('span', { textContent: 'I feel this too' }), ' ', n);
+  feelBtn.setAttribute('aria-pressed', String(felt));
+
+  feelBtn.addEventListener('click', async () => {
+    const on = feelBtn.getAttribute('aria-pressed') === 'true';
+    // optimistic: the warmth should land before the network does
+    feelBtn.setAttribute('aria-pressed', String(!on));
+    n.textContent = String(Math.max(0, (+n.textContent) + (on ? -1 : 1)));
+    feelBtn.classList.remove('pulse'); void feelBtn.offsetWidth; if (!on) feelBtn.classList.add('pulse');
+    on ? feltIds.delete(t.id) : feltIds.add(t.id);
+    store.set('seruh_felt', [...feltIds]);
+    try {
+      const r = await api.feel(t.id);
+      if (r && typeof r.count === 'number') n.textContent = String(r.count);
+    } catch {
+      toast("Couldn't save that yet — it's still switched off on the server.");
+    }
+  });
+
+  const shareBtn = el('button', { className: 'act', type: 'button', 'aria-label': 'Share this thought' }, '↗ Share');
+  shareBtn.addEventListener('click', () => shareSheet(t));
+
+  const moreBtn = el('button', { className: 'act act-more', type: 'button', 'aria-label': 'More options' }, '···');
+  moreBtn.addEventListener('click', () => moreSheet(t));
+
+  return el('article', { className: 'card' },
+    el('div', { className: 'meta' },
+      t.mood ? el('span', { className: 'tag', textContent: t.mood }) : null,
+      t.category ? el('span', { className: 'tag', textContent: t.category }) : null,
+      el('span', { textContent: when(t.created_at) })),
+    el('blockquote', { className: 'thought', textContent: t.content }),
+    el('div', { className: 'actions' }, feelBtn, shareBtn, moreBtn));
+}
+
+/* ── share card ─────────────────────────────────────────────── */
+function shareSheet(t) {
+  const box = el('div');
+  const cv = el('canvas', { width: 1080, height: 1080 });
+  cv.style.cssText = 'width:100%;border-radius:14px;border:1px solid var(--line);display:block;margin-bottom:14px';
+  drawCard(cv, t.content);
+  box.append(cv);
+
+  const mk = (label, fn) => { const b = el('button', { className: 'opt', type: 'button', textContent: label }); b.addEventListener('click', fn); return b; };
+  box.append(
+    mk('Copy the words', async () => {
+      try { await navigator.clipboard.writeText(`${t.content}\n\n— Anonymous, on Seruh`); toast('Copied.'); }
+      catch { toast("Couldn't copy — try selecting the text."); } }),
+    mk('Copy a link', async () => {
+      try { await navigator.clipboard.writeText(`${location.origin}/f/${t.id}`); toast('Link copied.'); }
+      catch { toast("Couldn't copy the link."); } }),
+    mk('Download the card', () => {
+      try { const a = el('a', { download: 'seruh.png', href: cv.toDataURL('image/png') }); a.click(); toast('Saved.'); }
+      catch { toast("Couldn't save on this device — try a screenshot."); } }),
+  );
+  if (navigator.share) box.append(mk('Share…', async () => {
+    try { await navigator.share({ text: `${t.content}\n\n— Anonymous, on Seruh`, url: `${location.origin}/f/${t.id}` }); } catch {}
+  }));
+  openSheet('Share this thought', box);
+}
+
+function drawCard(cv, text) {
+  const c = cv.getContext('2d'), W = cv.width, H = cv.height;
+  const g = c.createLinearGradient(0, 0, W, H);
+  g.addColorStop(0, '#241F33'); g.addColorStop(1, '#171520');
+  c.fillStyle = g; c.fillRect(0, 0, W, H);
+  c.fillStyle = 'rgba(155,138,212,.14)'; c.beginPath(); c.arc(W * .82, H * .16, 190, 0, 7); c.fill();
+
+  c.fillStyle = '#A79FB4'; c.font = '600 30px "Plus Jakarta Sans", sans-serif';
+  c.fillText('Someone on Seruh said', 96, 168);
+
+  c.fillStyle = '#EDE9F2';
+  const size = text.length > 260 ? 48 : text.length > 140 ? 58 : 68;
+  c.font = `500 ${size}px Fraunces, Georgia, serif`;
+  const lines = [];
+  for (const para of String(text).split('\n')) {
+    let line = '';
+    for (const w of para.split(' ')) {
+      const test = line ? line + ' ' + w : w;
+      if (c.measureText(test).width > W - 192 && line) { lines.push(line); line = w; } else line = test;
+    }
+    lines.push(line);
+  }
+  let y = 300;
+  for (const l of lines.slice(0, 11)) { c.fillText(l, 96, y); y += size * 1.42; }
+
+  c.fillStyle = '#A79FB4'; c.font = '500 30px "Plus Jakarta Sans", sans-serif';
+  c.fillText('— Anonymous', 96, Math.min(y + 26, H - 150));
+  c.fillStyle = '#9B8AD4'; c.font = '700 32px "Plus Jakarta Sans", sans-serif';
+  c.fillText('seruh.netlify.app', 96, H - 84);
+}
+
+/* ── report ─────────────────────────────────────────────────── */
+const REASONS = ['Harassment', 'Bullying', 'Hate or Discrimination', 'Spam',
+                 'Inappropriate Content', 'Threatening Content', 'Concern for their safety', 'Other'];
+const REASON_MAP = { 'Harassment': 'Harassment / Abuse', 'Bullying': 'Harassment / Abuse',
+  'Hate or Discrimination': 'Hate or Discrimination', 'Spam': 'Spam',
+  'Inappropriate Content': 'Inappropriate Content', 'Threatening Content': 'Threatening Content',
+  'Concern for their safety': 'Other', 'Other': 'Other' };
+
+function moreSheet(t) {
+  const box = el('div');
+  const b = el('button', { className: 'opt', type: 'button', textContent: 'Report this thought' });
+  b.addEventListener('click', () => {
+    const list = el('div');
+    REASONS.forEach(r => {
+      const o = el('button', { className: 'opt', type: 'button', textContent: r });
+      o.addEventListener('click', async () => {
+        try { await api.report(t.id, REASON_MAP[r]); toast('Thank you. Someone will look at this.'); }
+        catch { toast("Couldn't send that report."); }
+        closeSheet();
+      });
+      list.append(o);
+    });
+    openSheet('What’s wrong with it?', list);
+  });
+  box.append(b);
+  openSheet('This thought', box);
+}
+
+/* ── composer ───────────────────────────────────────────────── */
+let mood = null, category = null;
+const body = $('#body');
+
+function chip(label, emoji, on, pressed = false) {
+  const b = el('button', { className: 'chip', type: 'button' }, emoji ? `${emoji} ${label}` : label);
+  b.setAttribute('aria-pressed', String(pressed));
+  b.addEventListener('click', () => { on(b); });
+  return b;
+}
+function pickOne(container, value, setter) {
+  [...container.children].forEach(c => c.setAttribute('aria-pressed', 'false'));
+  if (value) value.setAttribute('aria-pressed', 'true');
+  setter();
+}
+
+MOODS.forEach(([m, e]) => $('#moodChips').append(
+  chip(m, e, b => { const was = b.getAttribute('aria-pressed') === 'true';
+    pickOne($('#moodChips'), was ? null : b, () => mood = was ? null : m); })));
+
+body.addEventListener('input', () => { $('#count').textContent = `${body.value.length} / 1000`; });
+
+$('#postBtn').addEventListener('click', async () => {
+  const content = body.value.trim();
+  if (content.length < 3) { toast('A few more words, whenever you’re ready.'); body.focus(); return; }
+  const btn = $('#postBtn'); btn.disabled = true; btn.textContent = 'Sending…';
+  try {
+    const r = await api.post({ content, category: category || 'Life', mood: mood || 'Emotional', honey: $('#hp').value });
+    if (r && r.ok === false) { toast(r.message || "That one couldn’t be shared."); }
+    else {
+      toast('Your thought is out there now. 🫂');
+      body.value = ''; $('#count').textContent = '0 / 1000';
+      pickOne($('#moodChips'), null, () => mood = null);
+      pickOne($('#catChips'), null, () => category = null);
+      loadFeed();
+    }
+  } catch { toast('Something went wrong. Please try again.'); }
+  finally { btn.disabled = false; btn.textContent = 'Share anonymously'; }
+});
+
+document.querySelectorAll('[data-open-composer]').forEach(b =>
+  b.addEventListener('click', () => {
+    $('#write').scrollIntoView({ behavior: 'smooth', block: 'center' });
+    setTimeout(() => body.focus(), 380);
+  }));
+
+/* ── theme ──────────────────────────────────────────────────── */
+const savedTheme = store.get('seruh_theme', null);
+if (savedTheme) document.documentElement.dataset.theme = savedTheme;
+$('#themeBtn').addEventListener('click', () => {
+  const now = document.documentElement.dataset.theme
+    || (matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
+  const next = now === 'dark' ? 'light' : 'dark';
+  document.documentElement.dataset.theme = next; store.set('seruh_theme', next);
+});
+
+/* ── load ───────────────────────────────────────────────────── */
+let feedMood = null;
+
+function emptyState(msg, hint) {
+  const box = el('div', { className: 'empty' },
+    el('p', { className: 'thought', textContent: msg }),
+    el('span', { textContent: hint }));
+  const b = el('button', { className: 'btn btn-primary', type: 'button', textContent: 'Share a thought' });
+  b.addEventListener('click', () => { $('#write').scrollIntoView({ behavior: 'smooth', block: 'center' }); setTimeout(() => body.focus(), 380); });
+  box.append(b);
+  return box;
+}
+
+async function loadFeed() {
+  const list = $('#feedList');
+  try {
+    const rows = await api.wall(12, feedMood);
+    list.replaceChildren(...(rows.length
+      ? rows.map(t => card(t))
+      : [emptyState("It's quiet here for now.", 'Maybe your thought should be the first one.')]));
+  } catch {
+    list.replaceChildren(emptyState("We couldn't reach the thoughts just now.", 'Try again in a moment.'));
+  }
+}
+
+async function loadDark() {
+  try {
+    const rows = await api.wall(40);
+    // written between 11pm and 5am, in the reader's own timezone
+    const night = rows.filter(r => { const h = new Date(r.created_at).getHours(); return h >= 23 || h < 5; }).slice(0, 3);
+    $('#darkList').replaceChildren(...(night.length
+      ? night.map(t => card(t, { night: true }))
+      : [el('p', { className: 'sub', style: 'margin:0', textContent: 'Nothing from the small hours yet. If you’re up, you could be the first.' })]));
+  } catch {}
+}
+
+async function loadRandom() {
+  try {
+    const q = await api.random();
+    $('#randomQ').textContent = q?.quote || '…';
+    $('#randomQ').dataset.id = q?.id || '';
+  } catch { $('#randomQ').textContent = 'Couldn’t reach one just now.'; }
+}
+$('#randomBtn').addEventListener('click', () => { const id = $('#randomQ').dataset.id || null; api.random(id).then(q => { $('#randomQ').textContent = q?.quote || '…'; $('#randomQ').dataset.id = q?.id || ''; }).catch(() => {}); });
+
+async function loadDaily() {
+  const box = $('#dailyBox');
+  const p = await api.daily();
+  if (p && p.question) {
+    box.replaceChildren(
+      el('q', { className: 'thought', textContent: p.question }),
+      el('p', { className: 'sub', textContent: `${p.answer_count || 0} ${p.answer_count === 1 ? 'person has' : 'people have'} answered.` }),
+      (() => { const b = el('button', { className: 'btn btn-primary', type: 'button', style: 'padding:11px 20px;font-size:.9rem', textContent: 'Answer anonymously' });
+        b.addEventListener('click', () => { $('#write').scrollIntoView({ behavior: 'smooth', block: 'center' }); setTimeout(() => body.focus(), 380); });
+        return b; })());
+  } else {
+    box.replaceChildren(
+      el('q', { className: 'thought', textContent: 'What’s something you’ve never told anyone?' }),
+      el('p', { className: 'sub', textContent: 'A new question every day, once the daily prompts are switched on.' }));
+  }
+}
+
+async function loadCategories() {
+  try {
+    const cats = await api.categories();
+    cats.forEach(({ name }) => $('#catChips').append(
+      chip(name, null, b => { const was = b.getAttribute('aria-pressed') === 'true';
+        pickOne($('#catChips'), was ? null : b, () => category = was ? null : name); })));
+  } catch {}
+}
+
+function buildExplore() {
+  MOODS.forEach(([m, e]) => $('#exploreChips').append(
+    chip(m, e, b => {
+      const was = b.getAttribute('aria-pressed') === 'true';
+      pickOne($('#exploreChips'), was ? null : b, () => feedMood = was ? null : m);
+      loadFeed();
+      $('#feed').scrollIntoView({ behavior: 'smooth', block: 'start' });
+    })));
+}
+
+buildExplore();
+loadCategories();
+loadFeed();
+loadDaily();
+loadRandom();
+loadDark();
+</script>
+</body>
+</html>
