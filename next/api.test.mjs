@@ -50,6 +50,28 @@ for (const [fn,args,label] of [
   let status=200; try{await rpc(fn,args)}catch(e){status=e.status}
   ok(status===404||status===200,`${label}: ${status===404?'404 → hides itself':'live'}`,String(status));
 }
+console.log('\n═══ your own thoughts — the privacy promise must be reachable ═══');
+// PostgREST matches an RPC by parameter NAME, so each call is asserted
+// with the exact argument set the app sends. An earlier probe with
+// extra params 404'd and looked like a missing function.
+const strangerVisitor = '00000000-0000-0000-0000-0000000000ff';
+const mine = await rpc('get_my_submissions', { p_visitor: strangerVisitor });
+ok(Array.isArray(mine), 'get_my_submissions returns a list');
+ok(mine.length === 0, 'an unknown visitor owns nothing', String(mine.length));
+
+for (const [fn, args, label] of [
+  ['delete_my_feeling', { p_id: '00000000-0000-0000-0000-000000000000', p_visitor: strangerVisitor }, 'delete your own'],
+  ['set_feeling_visibility', { p_id: '00000000-0000-0000-0000-000000000000', p_visitor: strangerVisitor, p_visibility: 'PRIVATE' }, 'change who sees it'],
+]) {
+  let status = 200;
+  try { await rpc(fn, args) } catch (e) { status = e.status }
+  ok(status !== 404, `${label} (${fn}) exists with these exact params`, String(status));
+}
+
+// the wall must be unchanged: neither call above owned anything
+const after = await rest('feelings_public?select=id&order=created_at.desc&limit=40');
+ok(after.length === all.length, 'a stranger calling delete changed nothing', `${all.length} → ${after.length}`);
+
 console.log('\n═══ report path (exists today) ═══');
 let rs=0; try{await rpc('report_feeling',{p_feeling:'00000000-0000-0000-0000-000000000000',p_visitor:'00000000-0000-0000-0000-000000000000',p_reason:'Spam'})}catch(e){rs=e.status}
 ok(rs!==404,'report_feeling exists (rejects a bogus id, as it should)',String(rs));

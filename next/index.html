@@ -177,6 +177,17 @@ h1{font-family:"Fraunces",serif; font-weight:500; font-size:clamp(2.05rem,8vw,2.
 .reply p{margin:0 0 6px;font-family:"Fraunces",serif;font-size:1rem;line-height:1.5}
 .reply .on{font-size:.76rem;color:var(--faint)}
 
+.mine{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:16px;margin-bottom:10px}
+.mine blockquote{margin:0 0 10px;font-size:1rem;line-height:1.55;white-space:pre-line}
+.mine .row{display:flex;flex-wrap:wrap;gap:6px;align-items:center}
+.vis{border:1px solid var(--line);border-radius:999px;padding:5px 11px;font-size:.75rem;font-weight:600;color:var(--soft)}
+.vis[aria-pressed="true"]{background:var(--dusk-soft);border-color:var(--dusk);color:var(--dusk)}
+.danger{margin-left:auto;color:var(--ember);font-size:.78rem;font-weight:600;padding:6px 10px;border-radius:9px}
+.danger:hover{background:var(--ember-soft)}
+.stats{display:flex;gap:22px;padding:14px 0 18px;border-bottom:1px solid var(--line);margin-bottom:16px}
+.stat b{display:block;font-family:"Fraunces",serif;font-size:1.5rem;font-weight:500;line-height:1}
+.stat span{font-size:.75rem;color:var(--faint)}
+
 /* ── toast ──────────────────────────────────────────────── */
 #toast{position:fixed; left:50%; bottom:96px; transform:translate(-50%,16px); z-index:80;
   background:var(--ink); color:var(--ground); padding:12px 18px; border-radius:999px;
@@ -203,6 +214,7 @@ footer{padding:36px 0 120px; text-align:center; color:var(--faint); font-size:.8
     <a class="navlink" href="#feed">Home</a>
     <a class="navlink" href="#explore">Explore</a>
     <a class="navlink" href="#daily">Today's Seruh</a>
+    <a class="navlink" href="#dark">After Dark</a>
     <button class="icon-btn" id="themeBtn" aria-label="Switch between light and dark">◐</button>
   </div>
 </header>
@@ -240,6 +252,15 @@ footer{padding:36px 0 120px; text-align:center; color:var(--faint); font-size:.8
     <h2>Someone answered</h2>
     <p class="sub">Private notes from people who read what you wrote. Only you can see these.</p>
     <div id="repliesList"></div>
+  </section>
+
+  <!-- 2c. your thoughts -->
+  <section class="wrap" id="you" hidden style="margin-bottom:44px">
+    <p class="eyebrow">Yours</p>
+    <h2>What you've said here</h2>
+    <p class="sub">Only you can see this list. Change who sees a thought, or take it back entirely.</p>
+    <div class="stats" id="youStats"></div>
+    <div id="youList"></div>
   </section>
 
   <!-- 3. today's thoughts -->
@@ -314,7 +335,7 @@ footer{padding:36px 0 120px; text-align:center; color:var(--faint); font-size:.8
   <a class="tab" href="#explore"><span aria-hidden="true">🧭</span>Explore</a>
   <button class="tab tab-share" data-open-composer aria-label="Share a thought"><span class="bubble" aria-hidden="true">✎</span></button>
   <a class="tab" href="#daily"><span aria-hidden="true">✨</span>Today</a>
-  <a class="tab" href="#dark"><span aria-hidden="true">🌙</span>Dark</a>
+  <a class="tab" href="#you"><span aria-hidden="true">🫙</span>You</a>
 </nav>
 
 <div class="scrim" id="scrim"></div>
@@ -404,6 +425,9 @@ const api = {
     }
     return rpc('toggle_feeling_like', { p_feeling: id, p_visitor: visitorId });
   },
+  mine: () => rpc('get_my_submissions', { p_visitor: visitorId }),
+  remove: (id) => rpc('delete_my_feeling', { p_id: id, p_visitor: visitorId }),
+  setVisibility: (id, v) => rpc('set_feeling_visibility', { p_id: id, p_visitor: visitorId, p_visibility: v }),
   reply: (id, body) => rpc('send_echo', { p_feeling: id, p_visitor: visitorId, p_body: body }),
   myReplies: () => rpc('get_my_echoes', { p_visitor: visitorId, p_page: 0 }),
   async daily() {
@@ -520,6 +544,83 @@ function replySheet(t) {
   });
   box.append(ta, send);
   openSheet('Say something back', box);
+}
+
+/* ── your own thoughts ──────────────────────────────────────────
+   The privacy section promises you can change who sees a thought or
+   take it back at any time. This is where that promise is kept —
+   a claim a product makes in its own copy has to be reachable in
+   two taps, or it is not a promise. */
+const VIS = [['PUBLIC', 'On the wall'], ['ANONYMOUS', 'On the wall, unsigned'], ['PRIVATE', 'Just me']];
+
+function mineItem(t, onGone) {
+  const row = el('div', { className: 'row' });
+  const wrap = el('div', { className: 'mine' },
+    el('blockquote', { className: 'thought', textContent: t.content }),
+    row);
+
+  VIS.forEach(([v, label]) => {
+    const b = el('button', { className: 'vis', type: 'button', textContent: label });
+    b.setAttribute('aria-pressed', String(t.visibility === v));
+    b.addEventListener('click', async () => {
+      if (t.visibility === v) return;
+      const was = t.visibility; t.visibility = v;
+      [...row.querySelectorAll('.vis')].forEach((x, i) => x.setAttribute('aria-pressed', String(VIS[i][0] === v)));
+      try {
+        await api.setVisibility(t.id, v);
+        A.trackEvent('visibility_changed', { visibility: v });
+        toast(v === 'PRIVATE' ? 'Kept just for you now. 🤍' : 'Back on the wall.');
+        loadFeed();
+      } catch {
+        t.visibility = was;
+        [...row.querySelectorAll('.vis')].forEach((x, i) => x.setAttribute('aria-pressed', String(VIS[i][0] === was)));
+        toast("Couldn't change that just now.");
+      }
+    });
+    row.append(b);
+  });
+
+  const del = el('button', { className: 'danger', type: 'button', textContent: 'Delete' });
+  del.addEventListener('click', () => {
+    const box = el('div');
+    box.append(el('p', { className: 'sub', textContent: 'This removes it for good. Nobody will be able to read it again, including you.' }));
+    const yes = el('button', { className: 'btn btn-primary', type: 'button',
+      style: 'width:100%;background:var(--ember);box-shadow:none', textContent: 'Delete it' });
+    yes.addEventListener('click', async () => {
+      try {
+        await api.remove(t.id);
+        A.trackEvent('thought_deleted', {});
+        toast('Gone. 🤍'); closeSheet(); onGone(); loadFeed();
+      } catch { toast("Couldn't delete that just now."); }
+    });
+    const no = el('button', { className: 'opt', type: 'button', style: 'margin-top:10px;text-align:center', textContent: 'Keep it' });
+    no.addEventListener('click', closeSheet);
+    box.append(yes, no);
+    openSheet('Delete this thought?', box);
+  });
+  row.append(del);
+  return wrap;
+}
+
+async function loadMine() {
+  try {
+    const rows = await api.mine();
+    if (!rows || !rows.length) { $('#you').hidden = true; return; }
+    const render = () => {
+      $('#youList').replaceChildren(...rows.map(t => mineItem(t, () => {
+        const i = rows.findIndex(r => r.id === t.id);
+        if (i > -1) rows.splice(i, 1);
+        render();
+        if (!rows.length) $('#you').hidden = true;
+      })));
+      const stats = [['Thoughts', rows.length]];
+      if (caps.echoes) stats.push(['Replies received', myReplyCount]);
+      $('#youStats').replaceChildren(...stats.map(([label, n]) =>
+        el('div', { className: 'stat' }, el('b', { textContent: String(n) }), el('span', { textContent: label }))));
+    };
+    render();
+    $('#you').hidden = false;
+  } catch { $('#you').hidden = true; }
 }
 
 /* ── share card ─────────────────────────────────────────────── */
@@ -642,7 +743,7 @@ $('#postBtn').addEventListener('click', async () => {
       body.value = ''; $('#count').textContent = '0 / 1000';
       pickOne($('#moodChips'), null, () => mood = null);
       pickOne($('#catChips'), null, () => category = null);
-      loadFeed();
+      loadFeed(); loadMine();
     }
   } catch { toast('Something went wrong. Please try again.'); }
   finally { btn.disabled = false; btn.textContent = 'Share anonymously'; }
@@ -757,11 +858,13 @@ async function detectEchoes() {
   catch (e) { caps.echoes = e.status === 404 ? false : true; }
 }
 
+let myReplyCount = 0;
 async function loadReplies() {
   if (caps.echoes === false) return;
   try {
     const rows = await api.myReplies();
     if (!rows || !rows.length) return;
+    myReplyCount = rows.length;
     $('#repliesList').replaceChildren(...rows.map(r =>
       el('div', { className: 'reply' },
         el('p', { className: 'thought', textContent: r.body }),
@@ -777,7 +880,8 @@ async function loadReplies() {
   loadCategories();
   await detectEchoes();
   loadFeed();
-  loadReplies();
+  await loadReplies();
+  loadMine();
   loadDaily();
   loadRandom();
   loadDark();
