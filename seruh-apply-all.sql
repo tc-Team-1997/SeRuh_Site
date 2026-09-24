@@ -3,11 +3,18 @@
 --
 --  Supabase → SQL Editor → New query → paste → Run.
 --
+--  THE WHOLE FILE IS ONE TRANSACTION. Either all of it applies or
+--  none of it does. The individual seruh-phaseN-migration.sql files
+--  each commit separately; this bundle deliberately does not, so a
+--  failure anywhere cannot leave the database half-migrated — and so
+--  the "already applied" guard below cannot be stepped past by a
+--  client configured to continue after an error.
+--
 --  Contains, in dependency order:
---    5   the moderation engine (already applied on 3 Sep — included
---        anyway because phase 6 calls it, and re-running it is a
---        no-op; a bundle should not depend on what it assumes)
---    5b  likes on the wall (they throw today)
+--    5   moderation engine   (already applied 3 Sep; a no-op, but
+--        included because phase 6 calls it and a bundle should not
+--        depend on what it assumes)
+--    5b  likes on the wall — they throw today
 --    6   release the stranded legacy backlog
 --    7   keep contact details off the wall
 --    8   daily prompts, archive, curated highlights
@@ -15,24 +22,35 @@
 --    10  post register
 --    11  echoes
 --
---  Every section ends in its own assertion block that raises rather
---  than half-applying, and 8 through 11 each run inside their own
---  transaction, so a section that fails rolls itself back and leaves
---  the ones before it in place. Nothing here is destructive: no data
---  is deleted and no existing value is overwritten.
+--  Every section ends in an assertion block that raises rather than
+--  applying something wrong. Nothing here deletes data or overwrites
+--  an existing value.
 --
---  Two things this deliberately does NOT do, because both should be
---  a separate decision after you have looked at the preview:
---    select * from preview_legacy_flagged();     then release_legacy_flagged();
---    select * from preview_unsafe_display_names(); then scrub_unsafe_display_names();
---    select * from preview_register_backfill();  then apply_register_backfill();
+--  Three things it deliberately does NOT do. Each changes existing
+--  rows and deserves a look at its preview first:
+--    select * from preview_legacy_flagged();        then release_legacy_flagged();
+--    select * from preview_unsafe_display_names();  then scrub_unsafe_display_names();
+--    select * from preview_register_backfill();     then apply_register_backfill();
 -- ═══════════════════════════════════════════════════════════════
 
+begin;
+
+-- ─── Guard: this bundle runs once ───────────────────────────────
+-- Three sections own successive signatures of publish_feeling and
+-- two own successive versions of feelings_public. Replaying that
+-- would recreate a narrower signature beside a wider one, or try to
+-- shrink a view CREATE OR REPLACE can only grow. Refusing is safer
+-- than mutating shared objects to force a replay.
+do $$
+begin
+  if to_regclass('public.echoes') is not null then
+    raise exception 'Already applied — nothing was changed. Re-run an individual seruh-phaseN-migration.sql if you need to.';
+  end if;
+end $$;
 
 -- ══════════════════════════════════════════════════════════
 -- ▼ seruh-phase5-migration.sql
 -- ══════════════════════════════════════════════════════════
-
 -- ═══════════════════════════════════════════════════════════════
 --  SeRuh — Phase 5 migration: moderation engine repair
 --  Run AFTER seruh-setup.sql, seruh-phase3-migration.sql and
@@ -204,11 +222,9 @@ begin
     array_length(block_cases, 1), array_length(allow_cases, 1), array_length(flag_cases, 1), reject, flagat;
 end $$;
 
-
 -- ══════════════════════════════════════════════════════════
 -- ▼ seruh-phase5b-migration.sql
 -- ══════════════════════════════════════════════════════════
-
 -- ═══════════════════════════════════════════════════════════════
 --  SeRuh — Phase 5b migration: repair likes on the feelings wall
 --  Run AFTER seruh-phase5-migration.sql. Safe to run more than once.
@@ -331,7 +347,6 @@ end $$;
 -- ══════════════════════════════════════════════════════════
 -- ▼ seruh-phase6-migration.sql
 -- ══════════════════════════════════════════════════════════
-
 -- ═══════════════════════════════════════════════════════════════
 --  SeRuh — Phase 6 migration: release the legacy FLAGGED backlog
 --  Run AFTER seruh-phase5-migration.sql (it needs the repaired
@@ -571,7 +586,6 @@ end $$;
 -- ══════════════════════════════════════════════════════════
 -- ▼ seruh-phase7-migration.sql
 -- ══════════════════════════════════════════════════════════
-
 -- ═══════════════════════════════════════════════════════════════
 --  SeRuh — Phase 7 migration: keep contact details off the wall
 --  Run AFTER seruh-phase5-migration.sql. Safe to run more than once.
@@ -801,7 +815,6 @@ end $$;
 -- ══════════════════════════════════════════════════════════
 -- ▼ seruh-phase8-migration.sql
 -- ══════════════════════════════════════════════════════════
-
 -- ═══════════════════════════════════════════════════════════════
 --  SeRuh — Phase 8 migration: daily prompts, archive, highlights
 --  Run AFTER seruh-phase7-migration.sql. Safe to run more than once.
@@ -845,7 +858,6 @@ end $$;
 --  ownership or name hygiene is touched.
 -- ═══════════════════════════════════════════════════════════════
 
-begin;
 
 -- ─── 1. The questions ───────────────────────────────────────────
 create table if not exists public.prompts (
@@ -1316,12 +1328,10 @@ begin
   raise notice 'phase 8 self-test passed: grant intact, prompt stable and unique, answers link and count, stale id harmless, PRIVATE never listed, moderation still applies, highlights never empty, admin guarded';
 end $$;
 
-commit;
 
 -- ══════════════════════════════════════════════════════════
 -- ▼ seruh-phase9-migration.sql
 -- ══════════════════════════════════════════════════════════
-
 -- ═══════════════════════════════════════════════════════════════
 --  SeRuh — Phase 9 migration: emotional reactions
 --  Run AFTER seruh-phase8-migration.sql. Safe to run more than once.
@@ -1362,7 +1372,6 @@ commit;
 --  reactions on the wall throw until it is.
 -- ═══════════════════════════════════════════════════════════════
 
-begin;
 
 -- ─── 1. A reaction has a kind ───────────────────────────────────
 -- Existing rows become FELT: a like was always "felt this".
@@ -1567,12 +1576,10 @@ begin
   raise notice 'phase 9 self-test passed: old like contract intact, reactions switch rather than stack, per-type counts correct, unknown kinds refused, view columns preserved';
 end $$;
 
-commit;
 
 -- ══════════════════════════════════════════════════════════
 -- ▼ seruh-phase10-migration.sql
 -- ══════════════════════════════════════════════════════════
-
 -- ═══════════════════════════════════════════════════════════════
 --  SeRuh — Phase 10 migration: post register (B-3)
 --  Run AFTER seruh-phase9-migration.sql. Safe to run more than once.
@@ -1610,7 +1617,6 @@ commit;
 --  category data changed.
 -- ═══════════════════════════════════════════════════════════════
 
-begin;
 
 -- ─── 1. The new dimension ───────────────────────────────────────
 alter table public.feelings add column if not exists register text;
@@ -1972,12 +1978,10 @@ begin
   raise notice 'phase 10: backfill NOT run. Preview it with: select * from preview_register_backfill();  then: select apply_register_backfill();';
 end $$;
 
-commit;
 
 -- ══════════════════════════════════════════════════════════
 -- ▼ seruh-phase11-migration.sql
 -- ══════════════════════════════════════════════════════════
-
 -- ═══════════════════════════════════════════════════════════════
 --  SeRuh — Phase 11 migration: Echoes (B-5)
 --  Run AFTER seruh-phase10-migration.sql. Safe to run more than once.
@@ -2022,7 +2026,6 @@ commit;
 --  deliberately left alone this time.
 -- ═══════════════════════════════════════════════════════════════
 
-begin;
 
 -- ─── 1. Settings ────────────────────────────────────────────────
 alter table public.mod_settings add column if not exists echo_max_per_10min int not null default 5;
@@ -2418,10 +2421,11 @@ begin
   raise notice 'phase 11: echo_notifications is a queue only — sending needs an email provider and an edge function to drain it. Rows sit PENDING until then; nothing is lost.';
 end $$;
 
+
 commit;
 
 -- ═══════════════════════════════════════════════════════════════
---  Verification — every row should read "yes".
+--  Verification — every row should read true.
 -- ═══════════════════════════════════════════════════════════════
 select 'moderation engine (5)' as step, (prosrc like '%array_append%')::text as ok from pg_proc where proname='moderate_text'
 union all select 'likes repaired (5b/9)', ((select prosrc not like '%APPROVED%' from pg_proc where proname='toggle_feeling_like')
@@ -2432,5 +2436,6 @@ union all select 'prompts seeded (8)',           ((select count(*) from public.p
 union all select 'reactions live (9)',           (to_regprocedure('public.toggle_feeling_reaction(uuid,uuid,text)') is not null)::text
 union all select 'register live (10)',           (to_regprocedure('public.infer_register(text,text)') is not null)::text
 union all select 'echoes live (11)',             (to_regclass('public.echoes') is not null)::text
+union all select 'exactly one publish_feeling',  ((select count(*) from pg_proc p join pg_namespace n on n.oid=p.pronamespace where n.nspname='public' and proname='publish_feeling') = 1)::text
 union all select 'posting still granted to anon',(array_to_string((select proacl from pg_proc where proname='publish_feeling'),',') like '%anon=X%')::text
 union all select 'thresholds untouched',         ((select flag_threshold=0.35 and reject_threshold=0.70 from public.mod_settings))::text;
