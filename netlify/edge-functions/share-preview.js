@@ -27,6 +27,7 @@ export const config = {
 }
 
 const UPSTREAM_TIMEOUT_MS = 1500
+const DB_SCHEMA = 'public'
 
 // AbortSignal.timeout only bounds the request if the runtime's fetch
 // honours it. This handler runs in front of every HTML response, so
@@ -63,10 +64,18 @@ async function fetchItem(target) {
       ? `rest/v1/feelings_public?select=content,category,mood&id=eq.${encodeURIComponent(target.id)}&limit=1`
       : `rest/v1/rpc/get_todays_feeling`
 
+  const isPost = target.kind === 'daily'
   const res = await fetch(`${cfg.url}/${path}`, {
-    method: target.kind === 'daily' ? 'POST' : 'GET',
-    headers: { apikey: cfg.key, 'Content-Type': 'application/json' },
-    body: target.kind === 'daily' ? '{}' : undefined,
+    method: isPost ? 'POST' : 'GET',
+    headers: {
+      apikey: cfg.key,
+      'Content-Type': 'application/json',
+      // PostgREST's default exposed schema is not necessarily `public`
+      // on this project, so name it explicitly rather than relying on
+      // the default. supabase-js does the same; raw fetch must too.
+      ...(isPost ? { 'Content-Profile': DB_SCHEMA } : { 'Accept-Profile': DB_SCHEMA }),
+    },
+    body: isPost ? '{}' : undefined,
     signal: AbortSignal.timeout(UPSTREAM_TIMEOUT_MS),
   })
   if (!res.ok) return null

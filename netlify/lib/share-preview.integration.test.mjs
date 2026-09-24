@@ -50,7 +50,7 @@ env.set('SUPABASE_ANON_KEY', ANON_KEY)
 let realId = null, realText = null
 try {
   const r = await fetch(`${SUPABASE_URL}/rest/v1/feelings_public?select=id,content&order=created_at.desc&limit=1`,
-    { headers: { apikey: ANON_KEY } })
+    { headers: { apikey: ANON_KEY, 'Accept-Profile': 'public' } })
   const rows = await r.json()
   realId = rows[0]?.id; realText = rows[0]?.content
 } catch { /* offline — section skipped below */ }
@@ -68,7 +68,10 @@ if (realId) {
   ok(!res.headers.get('content-length'), 'stale content-length dropped')
   ok(res.headers.get('content-type').includes('text/html'), 'content-type preserved')
 } else {
-  console.log('  SKIP  no network — happy path not exercised')
+  // A silent skip once hid the very bug this section exists to catch,
+  // so it counts as a failure unless the network is genuinely absent.
+  fail++
+  console.log('  FAIL  happy path did not run — could not read a wall post (network, key, or schema)')
 }
 
 console.log('\n═══ 2. homepage — tags injected with no upstream call ═══')
@@ -139,13 +142,26 @@ for (const p of ['/q/../../etc/passwd', '/q/%3Cscript%3E', '/f/' + 'a'.repeat(50
 console.log('\n═══ 7. a PRIVATE feeling cannot be previewed ═══')
 // the handler reads feelings_public, which excludes PRIVATE and
 // anything not PUBLISHED — assert the URL it actually builds
-let requested = null
+let requested = null, sentHeaders = null
 const saved = globalThis.fetch
-globalThis.fetch = (u, o) => { requested = String(u); return saved(u, o) }
+globalThis.fetch = (u, o) => { requested = String(u); sentHeaders = o?.headers || {}; return saved(u, o) }
 await run('/f/00000000-0000-0000-0000-000000000000')
 globalThis.fetch = saved
 ok(requested && requested.includes('feelings_public'), 'reads the public wall view', requested?.slice(0, 80))
 ok(requested && !/\/rest\/v1\/feelings\?/.test(requested), 'never reads the feelings table')
+
+console.log('\n═══ 8. the schema is named explicitly ═══')
+// This project's PostgREST default exposed schema is not `public`, so a
+// bare request 404s and every preview would silently fall back to the
+// brand card. supabase-js sends the profile header; raw fetch must too.
+ok(sentHeaders?.['Accept-Profile'] === 'public',
+  'GET carries Accept-Profile: public', JSON.stringify(sentHeaders))
+let dailyHeaders = null
+globalThis.fetch = (u, o) => { dailyHeaders = o?.headers || {}; return saved(u, o) }
+await run('/daily')
+globalThis.fetch = saved
+ok(dailyHeaders?.['Content-Profile'] === 'public',
+  'POST carries Content-Profile: public', JSON.stringify(dailyHeaders))
 
 console.log(`\n───────────────────────────────\n  ${pass} passed, ${fail} failed\n`)
 process.exit(fail ? 1 : 0)

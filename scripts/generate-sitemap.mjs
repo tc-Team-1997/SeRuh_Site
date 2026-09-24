@@ -40,7 +40,11 @@ function config() {
 
 async function get(path) {
   const { url, key } = config()
-  const res = await fetch(`${url}/rest/v1/${path}`, { headers: { apikey: key } })
+  // Name the schema explicitly — PostgREST's default exposed schema on
+  // this project is not `public`, so a bare request 404s.
+  const res = await fetch(`${url}/rest/v1/${path}`, {
+    headers: { apikey: key, 'Accept-Profile': 'public' },
+  })
   if (!res.ok) throw new Error(`${path} → ${res.status}`)
   return res.json()
 }

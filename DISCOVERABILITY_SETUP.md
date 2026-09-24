@@ -30,6 +30,8 @@ SUPABASE_ANON_KEY  <the anon key already in index.html>
 
 Neither is a secret — both ship inside the page today. Scope them to **Functions** (edge functions read them at request time, not build time).
 
+> **This project's PostgREST default exposed schema is not `public`.** A bare REST request returns `PGRST205 — Could not find the table 'api.quotes_public'`. The site is unaffected because supabase-js names the schema itself, but anything using raw `fetch` must send `Accept-Profile: public` on reads and `Content-Profile: public` on RPC calls. The edge function and the sitemap generator both do, and the integration suite asserts it. Worth checking Project Settings → API → Exposed schemas: `api` appears to be listed first and does not contain the views.
+
 Without them the function still runs and still injects a complete card; it just cannot fetch the quote, so an item previews under the brand title instead of its own text. It degrades, it does not fail.
 
 **2. Deploy.** Netlify picks up `netlify/edge-functions/` automatically — there is no `netlify.toml`, and none was added, so your existing deploy settings are untouched.
