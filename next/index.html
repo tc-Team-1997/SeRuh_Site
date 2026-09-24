@@ -12,6 +12,8 @@
 <meta property="og:description" content="Anonymous thoughts. Real feelings. No judgment.">
 <meta property="og:url" content="https://seruh.netlify.app/next">
 <meta name="twitter:card" content="summary">
+<!-- Put your GA4 measurement id here (G-XXXXXXXXXX). Empty = analytics fully off. -->
+<meta name="seruh:ga" content="">
 <meta name="theme-color" content="#F6F4F8" media="(prefers-color-scheme: light)">
 <meta name="theme-color" content="#131119" media="(prefers-color-scheme: dark)">
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -168,6 +170,13 @@ h1{font-family:"Fraunces",serif; font-weight:500; font-size:clamp(2.05rem,8vw,2.
 .opt{display:block; width:100%; text-align:left; padding:13px 14px; border-radius:12px; border:1px solid var(--line); margin-bottom:8px; font-size:.92rem; font-weight:500; transition:.15s}
 .opt:hover{border-color:var(--dusk); background:var(--sunk)}
 
+.sheet textarea{width:100%;min-height:110px;border:1px solid var(--line);border-radius:12px;
+  background:var(--sunk);padding:12px 14px;font-family:"Fraunces",serif;font-size:1rem;line-height:1.5;resize:vertical}
+.sheet textarea:focus{outline:none;border-color:var(--dusk)}
+.reply{background:var(--sunk);border:1px solid var(--line);border-radius:14px;padding:14px 16px;margin-bottom:10px}
+.reply p{margin:0 0 6px;font-family:"Fraunces",serif;font-size:1rem;line-height:1.5}
+.reply .on{font-size:.76rem;color:var(--faint)}
+
 /* ── toast ──────────────────────────────────────────────── */
 #toast{position:fixed; left:50%; bottom:96px; transform:translate(-50%,16px); z-index:80;
   background:var(--ink); color:var(--ground); padding:12px 18px; border-radius:999px;
@@ -223,6 +232,14 @@ footer{padding:36px 0 120px; text-align:center; color:var(--faint); font-size:.8
         <span class="count" id="count">0 / 1000</span>
       </div>
     </div>
+  </section>
+
+  <!-- 2b. replies to you -->
+  <section class="wrap" id="replies" hidden style="margin-bottom:44px">
+    <p class="eyebrow">Replies to you</p>
+    <h2>Someone answered</h2>
+    <p class="sub">Private notes from people who read what you wrote. Only you can see these.</p>
+    <div id="repliesList"></div>
   </section>
 
   <!-- 3. today's thoughts -->
@@ -316,6 +333,8 @@ footer{padding:36px 0 120px; text-align:center; color:var(--faint); font-size:.8
    which is where most of this will be read.
    ═══════════════════════════════════════════════════════════════ */
 
+import * as A from './analytics.js';
+
 const SUPABASE_URL = 'https://stowxeobdtvhapkzsvaq.supabase.co';
 const SUPABASE_KEY = 'sb_publishable_TolsckXYt02Y9zydXVy8ZQ_64XaJ-FO';
 
@@ -349,7 +368,7 @@ const store = {
    ship migration by migration, and a 404 here means "not switched on
    yet", not "broken". Anything unavailable hides itself instead of
    showing a dead control. */
-const caps = { reactions: null, prompts: null };
+const caps = { reactions: null, prompts: null, echoes: null };
 
 async function rest(path, { method = 'GET', body } = {}) {
   const res = await fetch(`${SUPABASE_URL}/rest/v1/${path}`, {
@@ -385,6 +404,8 @@ const api = {
     }
     return rpc('toggle_feeling_like', { p_feeling: id, p_visitor: visitorId });
   },
+  reply: (id, body) => rpc('send_echo', { p_feeling: id, p_visitor: visitorId, p_body: body }),
+  myReplies: () => rpc('get_my_echoes', { p_visitor: visitorId, p_page: 0 }),
   async daily() {
     try { const p = await rpc('get_todays_prompt'); caps.prompts = !!p; return p; }
     catch { caps.prompts = false; return null; }
@@ -445,6 +466,7 @@ function card(t, { night = false } = {}) {
     feelBtn.classList.remove('pulse'); void feelBtn.offsetWidth; if (!on) feelBtn.classList.add('pulse');
     on ? feltIds.delete(t.id) : feltIds.add(t.id);
     store.set('seruh_felt', [...feltIds]);
+    A.trackFeelThisToo(!on);
     try {
       const r = await api.feel(t.id);
       if (r && typeof r.count === 'number') n.textContent = String(r.count);
@@ -454,7 +476,10 @@ function card(t, { night = false } = {}) {
   });
 
   const shareBtn = el('button', { className: 'act', type: 'button', 'aria-label': 'Share this thought' }, '↗ Share');
-  shareBtn.addEventListener('click', () => shareSheet(t));
+  shareBtn.addEventListener('click', () => { A.trackShareOpened(); shareSheet(t); });
+
+  const replyBtn = el('button', { className: 'act', type: 'button', 'aria-label': 'Reply privately to whoever wrote this' }, '💬 Reply');
+  replyBtn.addEventListener('click', () => replySheet(t));
 
   const moreBtn = el('button', { className: 'act act-more', type: 'button', 'aria-label': 'More options' }, '···');
   moreBtn.addEventListener('click', () => moreSheet(t));
@@ -465,7 +490,36 @@ function card(t, { night = false } = {}) {
       t.category ? el('span', { className: 'tag', textContent: t.category }) : null,
       el('span', { textContent: when(t.created_at) })),
     el('blockquote', { className: 'thought', textContent: t.content }),
-    el('div', { className: 'actions' }, feelBtn, shareBtn, moreBtn));
+    el('div', { className: 'actions' }, feelBtn, caps.echoes === false ? null : replyBtn, shareBtn, moreBtn));
+}
+
+/* ── reply ──────────────────────────────────────────────────────
+   A private note to the author, not a public comment. That is the
+   design the backend enforces: nobody but the person who wrote the
+   thought ever sees it, and the sender is never revealed to them.
+   It keeps a supportive reply from becoming a thread to perform in. */
+function replySheet(t) {
+  const box = el('div');
+  box.append(el('p', { className: 'sub',
+    textContent: 'Only the person who wrote this will see it. They will never know who you are.' }));
+  const ta = el('textarea', { maxLength: 500, placeholder: 'I don\u2019t know you, but I understand that feeling…' });
+  ta.setAttribute('aria-label', 'Your reply');
+  const send = el('button', { className: 'btn btn-primary', type: 'button',
+    style: 'margin-top:12px;width:100%', textContent: 'Send privately' });
+  send.addEventListener('click', async () => {
+    const v = ta.value.trim();
+    if (v.length < 2) { toast('A few words, whenever you’re ready.'); ta.focus(); return; }
+    send.disabled = true; send.textContent = 'Sending…';
+    try {
+      const r = await api.reply(t.id, v);
+      if (r && r.ok === false) toast(r.message || 'That one couldn’t be sent.');
+      else { A.trackReplySubmitted({ body: v }); toast('Sent. They’ll find it when they come back. 🫂'); closeSheet(); }
+    } catch (e) {
+      toast(e.status === 404 ? 'Replies are still being switched on.' : 'Something went wrong. Please try again.');
+    } finally { send.disabled = false; send.textContent = 'Send privately'; }
+  });
+  box.append(ta, send);
+  openSheet('Say something back', box);
 }
 
 /* ── share card ─────────────────────────────────────────────── */
@@ -479,13 +533,13 @@ function shareSheet(t) {
   const mk = (label, fn) => { const b = el('button', { className: 'opt', type: 'button', textContent: label }); b.addEventListener('click', fn); return b; };
   box.append(
     mk('Copy the words', async () => {
-      try { await navigator.clipboard.writeText(`${t.content}\n\n— Anonymous, on Seruh`); toast('Copied.'); }
+      try { await navigator.clipboard.writeText(`${t.content}\n\n— Anonymous, on Seruh`); A.trackShareClicked('copy_text'); toast('Copied.'); }
       catch { toast("Couldn't copy — try selecting the text."); } }),
     mk('Copy a link', async () => {
-      try { await navigator.clipboard.writeText(`${location.origin}/f/${t.id}`); toast('Link copied.'); }
+      try { await navigator.clipboard.writeText(`${location.origin}/f/${t.id}`); A.trackShareClicked('copy_link'); toast('Link copied.'); }
       catch { toast("Couldn't copy the link."); } }),
     mk('Download the card', () => {
-      try { const a = el('a', { download: 'seruh.png', href: cv.toDataURL('image/png') }); a.click(); toast('Saved.'); }
+      try { const a = el('a', { download: 'seruh.png', href: cv.toDataURL('image/png') }); a.click(); A.trackShareClicked('download'); toast('Saved.'); }
       catch { toast("Couldn't save on this device — try a screenshot."); } }),
   );
   if (navigator.share) box.append(mk('Share…', async () => {
@@ -541,7 +595,7 @@ function moreSheet(t) {
     REASONS.forEach(r => {
       const o = el('button', { className: 'opt', type: 'button', textContent: r });
       o.addEventListener('click', async () => {
-        try { await api.report(t.id, REASON_MAP[r]); toast('Thank you. Someone will look at this.'); }
+        try { await api.report(t.id, REASON_MAP[r]); A.trackReportSubmitted(REASON_MAP[r]); toast('Thank you. Someone will look at this.'); }
         catch { toast("Couldn't send that report."); }
         closeSheet();
       });
@@ -581,8 +635,9 @@ $('#postBtn').addEventListener('click', async () => {
   const btn = $('#postBtn'); btn.disabled = true; btn.textContent = 'Sending…';
   try {
     const r = await api.post({ content, category: category || 'Life', mood: mood || 'Emotional', honey: $('#hp').value });
-    if (r && r.ok === false) { toast(r.message || "That one couldn’t be shared."); }
+    if (r && r.ok === false) { A.trackThoughtRejected(r.decision || 'refused'); toast(r.message || "That one couldn’t be shared."); }
     else {
+      A.trackThoughtSubmitted({ emotion: mood, category, body: content });
       toast('Your thought is out there now. 🫂');
       body.value = ''; $('#count').textContent = '0 / 1000';
       pickOne($('#moodChips'), null, () => mood = null);
@@ -595,6 +650,7 @@ $('#postBtn').addEventListener('click', async () => {
 
 document.querySelectorAll('[data-open-composer]').forEach(b =>
   b.addEventListener('click', () => {
+    A.trackShareThoughtClicked(b.closest('.tabbar') ? 'tabbar' : 'hero');
     $('#write').scrollIntoView({ behavior: 'smooth', block: 'center' });
     setTimeout(() => body.focus(), 380);
   }));
@@ -639,6 +695,7 @@ async function loadDark() {
     const rows = await api.wall(40);
     // written between 11pm and 5am, in the reader's own timezone
     const night = rows.filter(r => { const h = new Date(r.created_at).getHours(); return h >= 23 || h < 5; }).slice(0, 3);
+    A.trackAfterDarkViewed(night.length);
     $('#darkList').replaceChildren(...(night.length
       ? night.map(t => card(t, { night: true }))
       : [el('p', { className: 'sub', style: 'margin:0', textContent: 'Nothing from the small hours yet. If you’re up, you could be the first.' })]));
@@ -652,12 +709,13 @@ async function loadRandom() {
     $('#randomQ').dataset.id = q?.id || '';
   } catch { $('#randomQ').textContent = 'Couldn’t reach one just now.'; }
 }
-$('#randomBtn').addEventListener('click', () => { const id = $('#randomQ').dataset.id || null; api.random(id).then(q => { $('#randomQ').textContent = q?.quote || '…'; $('#randomQ').dataset.id = q?.id || ''; }).catch(() => {}); });
+$('#randomBtn').addEventListener('click', () => { A.trackRandomThought(); const id = $('#randomQ').dataset.id || null; api.random(id).then(q => { $('#randomQ').textContent = q?.quote || '…'; $('#randomQ').dataset.id = q?.id || ''; }).catch(() => {}); });
 
 async function loadDaily() {
   const box = $('#dailyBox');
   const p = await api.daily();
   if (p && p.question) {
+    A.trackDailyViewed();
     box.replaceChildren(
       el('q', { className: 'thought', textContent: p.question }),
       el('p', { className: 'sub', textContent: `${p.answer_count || 0} ${p.answer_count === 1 ? 'person has' : 'people have'} answered.` }),
@@ -676,7 +734,8 @@ async function loadCategories() {
     const cats = await api.categories();
     cats.forEach(({ name }) => $('#catChips').append(
       chip(name, null, b => { const was = b.getAttribute('aria-pressed') === 'true';
-        pickOne($('#catChips'), was ? null : b, () => category = was ? null : name); })));
+        pickOne($('#catChips'), was ? null : b, () => category = was ? null : name);
+        if (!was) A.trackCategorySelected(name); })));
   } catch {}
 }
 
@@ -685,17 +744,44 @@ function buildExplore() {
     chip(m, e, b => {
       const was = b.getAttribute('aria-pressed') === 'true';
       pickOne($('#exploreChips'), was ? null : b, () => feedMood = was ? null : m);
+      if (!was) A.trackEmotionSelected(m, 'explore');
       loadFeed();
       $('#feed').scrollIntoView({ behavior: 'smooth', block: 'start' });
     })));
 }
 
-buildExplore();
-loadCategories();
-loadFeed();
-loadDaily();
-loadRandom();
-loadDark();
+async function detectEchoes() {
+  // a read-only probe: 404 means phase 11 is not applied yet, so the
+  // reply affordance hides rather than offering a button that fails
+  try { await api.myReplies(); caps.echoes = true; }
+  catch (e) { caps.echoes = e.status === 404 ? false : true; }
+}
+
+async function loadReplies() {
+  if (caps.echoes === false) return;
+  try {
+    const rows = await api.myReplies();
+    if (!rows || !rows.length) return;
+    $('#repliesList').replaceChildren(...rows.map(r =>
+      el('div', { className: 'reply' },
+        el('p', { className: 'thought', textContent: r.body }),
+        el('span', { className: 'on', textContent: `on your thought: “${r.on_feeling}…”` }))));
+    $('#replies').hidden = false;
+  } catch {}
+}
+
+(async () => {
+  A.initAnalytics({ id: document.querySelector('meta[name="seruh:ga"]')?.content || '' });
+  A.trackPageView('/next', document.title);
+  buildExplore();
+  loadCategories();
+  await detectEchoes();
+  loadFeed();
+  loadReplies();
+  loadDaily();
+  loadRandom();
+  loadDark();
+})();
 </script>
 </body>
 </html>
