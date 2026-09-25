@@ -30,3 +30,6 @@ pnpm-debug.log*
 *.njsproj
 *.sln
 *.sw?
+
+# Netlify publish directory (assembled at build time)
+_site
