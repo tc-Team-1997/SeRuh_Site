@@ -1,0 +1,9 @@
+# Publish only what the browser needs.
+#
+# Netlify was serving the repository root, so the SQL migrations, the
+# test suites and the old index_7.html build were all downloadable
+# from the live site. The migrations contain moderate_text in full.
+[build]
+  command = "bash scripts/build-publish.sh _site"
+  publish = "_site"
+  edge_functions = "netlify/edge-functions"
