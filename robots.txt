@@ -1,0 +1,14 @@
+# SeRuh — Where Feelings Find Words
+# Private feelings are never served at a URL and never appear in the
+# sitemap; the wall view (feelings_public) is the only source of
+# anything listed here.
+
+User-agent: *
+Allow: /
+
+# The admin panel and a person's own space are behind hash routes, so
+# a crawler never reaches them. Listed anyway, so intent is explicit.
+Disallow: /admin
+Disallow: /me
+
+Sitemap: https://seruh.netlify.app/sitemap.xml
