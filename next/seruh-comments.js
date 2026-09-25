@@ -1,14 +1,15 @@
 /* ─────────────────────────────────────────────────────────────
-   Comments on quotes, added to the live site without its source.
+   Comments on quotes and on wall posts, added to the live site
+   without its source.
 
    The deployed app is a 777 KB minified bundle whose source does not
    exist anywhere, so this cannot be a component. It is a widget that
    attaches itself to the page the app renders:
 
-     · every quote card carries a button labelled "Copy this quote"
-       and a <blockquote> holding the quote text;
-     · the text is matched against quotes_public to recover the id,
-       because the DOM carries no id of its own;
+     · every card carries a button labelled "Copy this quote" or
+       "Copy this feeling", and a <blockquote> holding the text;
+     · that text is matched against quotes_public / feelings_public
+       to recover the id, because the DOM carries none of its own;
      · a 💬 button is appended to the card's own action row;
      · the thread opens in an overlay attached to <body>, outside
        React's tree, so a re-render cannot tear it down mid-sentence.
@@ -65,14 +66,17 @@
     + 'border-radius:999px;padding:.375rem .75rem;font-size:.8rem;color:#6f6674;transition:color .3s,background .3s}'
     + '.sqc-btn:hover{color:#9a545f;background:rgba(244,227,226,.6)}'
     + '.sqc-scrim{position:fixed;inset:0;background:rgba(46,42,51,.5);backdrop-filter:blur(3px);z-index:9998;'
-    + 'opacity:0;transition:opacity .22s}.sqc-scrim.on{opacity:1}'
+    + 'opacity:0;visibility:hidden;pointer-events:none;transition:opacity .22s,visibility .22s}'
+    + '.sqc-scrim.on{opacity:1;visibility:visible;pointer-events:auto}'
     + '.sqc-sheet{position:fixed;left:0;right:0;bottom:0;z-index:9999;background:#fffdf8;color:#2e2a33;'
     + 'border-radius:22px 22px 0 0;padding:20px 20px calc(20px + env(safe-area-inset-bottom));max-height:88vh;'
-    + 'overflow-y:auto;transform:translateY(102%);transition:transform .3s cubic-bezier(.22,1,.36,1);'
+    + 'overflow-y:auto;transform:translateY(102%);visibility:hidden;pointer-events:none;'
+    + 'transition:transform .3s cubic-bezier(.22,1,.36,1),visibility .3s;'
     + 'font-family:ui-sans-serif,system-ui,sans-serif;box-shadow:0 -10px 40px -16px rgba(0,0,0,.35)}'
-    + '.sqc-sheet.on{transform:none}'
+    + '.sqc-sheet.on{transform:none;visibility:visible;pointer-events:auto}'
     + '@media(min-width:640px){.sqc-sheet{left:50%;right:auto;bottom:auto;top:50%;width:min(560px,92vw);'
-    + 'border-radius:20px;transform:translate(-50%,-46%);opacity:0}.sqc-sheet.on{transform:translate(-50%,-50%);opacity:1}}'
+    + 'border-radius:20px;transform:translate(-50%,-46%);opacity:0}'
+    + '.sqc-sheet.on{transform:translate(-50%,-50%);opacity:1;visibility:visible;pointer-events:auto}}'
     + '.sqc-q{font-family:Georgia,serif;font-size:1.02rem;line-height:1.5;color:#2e2a33;white-space:pre-line;'
     + 'padding-bottom:14px;border-bottom:1px solid #e9e0d1;margin:0 0 14px}'
     + '.sqc-item{border-bottom:1px solid #e9e0d1;padding:12px 0}'
@@ -132,10 +136,18 @@
   function openSheet() { ensureSheet(); scrim.classList.add('on'); sheet.classList.add('on'); }
   function closeSheet() { if (sheet) { sheet.classList.remove('on'); scrim.classList.remove('on'); } }
 
-  function render(quoteId, quoteText, countEl) {
+  // 'quote' and 'feeling' are two parents of one comments table, so
+  // only the RPC names differ.
+  var RPCS = {
+    quote:   { list: 'get_quote_comments',   add: 'add_quote_comment',   count: 'count_quote_comments',   key: 'p_quote' },
+    feeling: { list: 'get_feeling_comments', add: 'add_feeling_comment', count: 'count_feeling_comments', key: 'p_feeling' },
+  };
+
+  function render(kind, id, text, countEl) {
+    var api = RPCS[kind];
     ensureSheet();
     sheet.textContent = '';
-    sheet.appendChild(el('p', { class: 'sqc-q', text: quoteText }));
+    sheet.appendChild(el('p', { class: 'sqc-q', text: text }));
     var list = el('div');
     sheet.appendChild(list);
 
@@ -145,7 +157,8 @@
     sheet.appendChild(ta); sheet.appendChild(send);
 
     function load() {
-      rpc('get_quote_comments', { p_quote: quoteId, p_visitor: VISITOR, p_page: 0 })
+      var args = { p_visitor: VISITOR, p_page: 0 }; args[api.key] = id;
+      rpc(api.list, args)
         .then(function (rows) {
           rows = rows || [];
           list.textContent = '';
@@ -181,7 +194,8 @@
       var v = (ta.value || '').trim();
       if (v.length < 2) { toast('A few words, whenever you’re ready.'); ta.focus(); return; }
       send.disabled = true; send.textContent = 'Posting…';
-      rpc('add_quote_comment', { p_quote: quoteId, p_visitor: VISITOR, p_body: v })
+      var post = { p_visitor: VISITOR, p_body: v }; post[api.key] = id;
+      rpc(api.add, post)
         .then(function (r) {
           if (r && r.ok === false) toast(r.message || 'That one couldn’t be posted.');
           else { toast((r && r.message) || 'Posted. \u{1F90D}'); ta.value = ''; load(); }
@@ -197,13 +211,15 @@
   }
 
   /* ── attach to the cards the app renders ── */
-  var quoteMap = null;
+  var maps = null;   // { quote: {text:id}, feeling: {text:id} }
 
   function enhance() {
-    if (!quoteMap) return;
-    var copies = document.querySelectorAll('button[aria-label="Copy this quote"]');
+    if (!maps) return;
+    var copies = document.querySelectorAll(
+      'button[aria-label="Copy this quote"], button[aria-label="Copy this feeling"]');
     for (var i = 0; i < copies.length; i++) {
       var btn = copies[i];
+      var kind = btn.getAttribute('aria-label') === 'Copy this feeling' ? 'feeling' : 'quote';
       var row = btn.parentElement;
       if (!row || row.hasAttribute(MARK)) continue;
 
@@ -216,22 +232,24 @@
       }
       if (!bq) continue;
 
-      var id = quoteMap[norm(bq.textContent)];
-      if (!id) continue;                       // a feeling, or a quote we don't know
+      var id = maps[kind][norm(bq.textContent)];
+      if (!id) continue;                       // something we don't have an id for
 
       row.setAttribute(MARK, '1');
-      (function (id, text, row) {
+      (function (kind, id, text, row) {
         var count = el('span', { text: '' });
-        var b = el('button', { class: 'sqc-btn', type: 'button', 'aria-label': 'Comments on this quote' });
+        var b = el('button', { class: 'sqc-btn', type: 'button',
+          'aria-label': 'Comments on this ' + kind });
         b.appendChild(document.createTextNode('\u{1F4AC} '));
         b.appendChild(count);
-        b.addEventListener('click', function (e) { e.preventDefault(); render(id, text, count); });
+        b.addEventListener('click', function (e) { e.preventDefault(); render(kind, id, text, count); });
         row.appendChild(b);
 
-        rpc('count_quote_comments', { p_quote: id })
+        var cargs = {}; cargs[RPCS[kind].key] = id;
+        rpc(RPCS[kind].count, cargs)
           .then(function (n) { if (n) count.textContent = String(n); })
           .catch(function () {});
-      })(id, bq.textContent, row);
+      })(kind, id, bq.textContent, row);
     }
   }
 
@@ -242,12 +260,16 @@
     // does the backend have comments at all? if not, add nothing.
     rpc('get_quote_comments', { p_quote: '00000000-0000-0000-0000-000000000000', p_visitor: VISITOR, p_page: 0 })
       .then(function () {
-        return fetch(API + '/rest/v1/quotes_public?select=id,quote&limit=1000',
-          { headers: { apikey: KEY, 'Accept-Profile': SCHEMA } }).then(function (r) { return r.json(); });
+        var h = { headers: { apikey: KEY, 'Accept-Profile': SCHEMA } };
+        return Promise.all([
+          fetch(API + '/rest/v1/quotes_public?select=id,quote&limit=1000', h).then(function (r) { return r.json(); }),
+          fetch(API + '/rest/v1/feelings_public?select=id,content&limit=1000', h).then(function (r) { return r.json(); }),
+        ]);
       })
-      .then(function (rows) {
-        quoteMap = {};
-        (rows || []).forEach(function (q) { quoteMap[norm(q.quote)] = q.id; });
+      .then(function (both) {
+        maps = { quote: {}, feeling: {} };
+        (both[0] || []).forEach(function (q) { maps.quote[norm(q.quote)] = q.id; });
+        (both[1] || []).forEach(function (f) { maps.feeling[norm(f.content)] = f.id; });
         document.head.appendChild(el('style', { text: CSS }));
         enhance();
         new MutationObserver(schedule).observe(document.body, { childList: true, subtree: true });
