@@ -58,7 +58,17 @@
     });
   }
 
-  var norm = function (s) { return String(s || '').replace(/\s+/g, ' ').trim().toLowerCase(); };
+  /* A feeling card renders its text as [ “ , content , ” ] — the app
+     adds the curly quotes — while a quote card renders the text bare.
+     Strip any wrapping quote mark from both sides so a card's
+     textContent can be compared with what the API returns. */
+  var norm = function (s) {
+    return String(s || '')
+      .replace(/\s+/g, ' ')
+      .replace(/^[\s"'\u201C\u201D\u2018\u2019\u00AB\u00BB]+/, '')
+      .replace(/[\s"'\u201C\u201D\u2018\u2019\u00AB\u00BB]+$/, '')
+      .trim().toLowerCase();
+  };
 
   /* ── styles, borrowed from the page's own palette ── */
   var CSS = ''
@@ -91,6 +101,19 @@
     + '.sqc-send{margin-top:10px;width:100%;border:0;cursor:pointer;border-radius:999px;background:#2e2a33;color:#faf6ef;'
     + 'padding:12px 20px;font-size:.9rem;font-weight:600}'
     + '.sqc-send:disabled{opacity:.6}'
+
+    /* ── a lighter setting ──────────────────────────────────────
+       The page reads large: card text near 1.3rem in a serif, with
+       section padding to match, so a phone shows very few words per
+       screen and the gaps read as empty rather than calm. This trims
+       both a notch. It is one block on purpose — every number is in
+       one place, so it is easy to tune or delete. */
+    + '.font-display{font-size:0.94em}'
+    + 'blockquote.font-display{font-size:1.04rem;line-height:1.5}'
+    + '@media(min-width:640px){blockquote.font-display{font-size:1.1rem}}'
+    + 'section.py-24,div.py-24{padding-top:3.25rem;padding-bottom:3.25rem}'
+    + '@media(min-width:640px){section.sm\\:py-28,div.sm\\:py-28{padding-top:4rem;padding-bottom:4rem}}'
+    + '.gap-10{gap:1.75rem}.gap-8{gap:1.5rem}.mb-12{margin-bottom:2rem}.mb-14{margin-bottom:2.25rem}'
     + '.sqc-toast{position:fixed;left:50%;bottom:26px;transform:translate(-50%,14px);z-index:10000;background:#2e2a33;'
     + 'color:#faf6ef;padding:11px 18px;border-radius:999px;font-size:.86rem;font-family:ui-sans-serif,system-ui,sans-serif;'
     + 'opacity:0;pointer-events:none;transition:.25s;max-width:88vw;text-align:center}.sqc-toast.on{opacity:1;transform:translate(-50%,0)}';
@@ -209,6 +232,123 @@
     load();
     openSheet();
   }
+
+
+  /* ── the share card, refitted ─────────────────────────────────
+     The app draws its card at 1080×1350 with a fixed 64px face, so
+     a long poem runs straight off the edge and over the wordmark.
+     It cannot be fixed in the app — no source — so the canvas is
+     repainted after the app has drawn it, at a size that actually
+     fits. The background is sampled from the app's own render, so
+     the theme swatches keep working without knowing their colours.
+
+     Text that still cannot fit at the smallest readable size is cut
+     with an ellipsis rather than overflowing: a card that is honest
+     about being an excerpt beats one that is unreadable. */
+
+  var CARD_SEL = 'canvas[aria-label="Share card preview"]';
+
+  function wrap(ctx, text, maxWidth) {
+    var lines = [];
+    String(text).split('\n').forEach(function (para) {
+      if (!para.trim()) { lines.push(''); return; }
+      var line = '';
+      para.trim().split(/\s+/).forEach(function (w) {
+        var test = line ? line + ' ' + w : w;
+        if (ctx.measureText(test).width > maxWidth && line) { lines.push(line); line = w; }
+        else line = test;
+      });
+      lines.push(line);
+    });
+    return lines;
+  }
+
+  function repaintCard(text) {
+    var cv = document.querySelector(CARD_SEL);
+    if (!cv || !cv.width || !text) return false;
+    var ctx = cv.getContext('2d');
+    if (!ctx) return false;
+
+    var W = cv.width, H = cv.height;
+
+    // sample the theme the app just painted
+    var bg = '#faf6ef', ink = '#2e2a33';
+    try {
+      var px = ctx.getImageData(6, 6, 1, 1).data;
+      bg = 'rgb(' + px[0] + ',' + px[1] + ',' + px[2] + ')';
+      var dark = (px[0] * 299 + px[1] * 587 + px[2] * 114) / 1000 < 128;
+      ink = dark ? '#f3ece3' : '#2e2a33';
+    } catch (e) {}
+
+    var padX = Math.round(W * 0.11), padTop = Math.round(H * 0.13);
+    var footer = Math.round(H * 0.16);
+    var maxW = W - padX * 2, maxH = H - padTop - footer;
+
+    // largest size that fits, then trim if even the smallest will not
+    var size = 64, lines = [], lh = 1;
+    for (; size >= 22; size -= 2) {
+      ctx.font = 'italic 500 ' + size + 'px "Cormorant Garamond", Georgia, serif';
+      lh = size * 1.42;
+      lines = wrap(ctx, text, maxW);
+      if (lines.length * lh <= maxH) break;
+    }
+    var fits = Math.floor(maxH / lh);
+    var cut = lines.length > fits;
+    if (cut) { lines = lines.slice(0, Math.max(1, fits - 1)); lines.push('…'); }
+
+    ctx.fillStyle = bg; ctx.fillRect(0, 0, W, H);
+
+    // the frame the original card has
+    ctx.strokeStyle = ink; ctx.globalAlpha = 0.16; ctx.lineWidth = 2;
+    ctx.strokeRect(padX * 0.55, padX * 0.55, W - padX * 1.1, H - padX * 1.1);
+    ctx.globalAlpha = 1;
+
+    ctx.fillStyle = ink;
+    ctx.textAlign = 'center';
+    ctx.font = 'italic 500 ' + size + 'px "Cormorant Garamond", Georgia, serif';
+    var blockH = lines.length * lh;
+    var y = padTop + Math.max(0, (maxH - blockH) / 2) + lh * 0.78;
+    lines.forEach(function (l) { ctx.fillText(l, W / 2, y); y += lh; });
+
+    // wordmark, on its own ground so nothing can ever sit on it
+    ctx.font = '500 46px "Cormorant Garamond", Georgia, serif';
+    ctx.fillText('SeRuh', W / 2, H - footer * 0.52);
+    ctx.globalAlpha = 0.6;
+    ctx.font = '400 26px Karla, ui-sans-serif, system-ui, sans-serif';
+    ctx.fillText('Where Feelings Find Words', W / 2, H - footer * 0.28);
+    ctx.globalAlpha = 1;
+    ctx.textAlign = 'start';
+    return true;
+  }
+
+  /* The app repaints on open and on every theme swatch, so retry for
+     a moment and repaint again after any click inside the dialog. */
+  var shareText = null;
+  function chaseCard() {
+    if (!shareText) return;
+    var tries = 0;
+    var t = setInterval(function () {
+      if (repaintCard(shareText) || ++tries > 16) clearInterval(t);
+      else tries++;
+    }, 140);
+  }
+
+  document.addEventListener('click', function (e) {
+    try {
+      var t = e.target && e.target.closest ? e.target.closest('button') : null;
+      if (!t) return;
+      var label = t.getAttribute('aria-label') || '';
+      if (label === 'Share this feeling' || label === 'Share this quote') {
+        var card = t, bq = null, hops = 0;
+        while (card && hops++ < 8) { bq = card.querySelector && card.querySelector('blockquote'); if (bq) break; card = card.parentElement; }
+        shareText = bq ? bq.textContent.replace(/^[\s“"']+|[\s”"']+$/g, '') : null;
+        chaseCard();
+      } else if (shareText && document.querySelector(CARD_SEL)) {
+        // a theme swatch or another control inside the open dialog
+        setTimeout(function () { repaintCard(shareText); }, 120);
+      }
+    } catch (err) {}
+  }, true);
 
   /* ── attach to the cards the app renders ── */
   var maps = null;   // { quote: {text:id}, feeling: {text:id} }
