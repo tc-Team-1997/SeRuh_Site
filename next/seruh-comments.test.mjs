@@ -106,7 +106,7 @@ const FEELING_TEXT = 'Some days I just hold it together with tape.'
 const QUOTE_ID = '65f42c6e-193b-415c-bda8-e75823fba02c'
 const FEELING_ID = '069c0154-beb4-4db2-8643-d79c45652f75'
 
-function load({ noSpacer = false } = {}) {
+function load({ noSpacer = false, decoy = false } = {}) {
   const document = new N('#document')
   document.head = document.appendChild(new N('head'))
   document.body = document.appendChild(new N('body'))
@@ -117,6 +117,10 @@ function load({ noSpacer = false } = {}) {
 
   const q = card('quote', QUOTE_TEXT), f = card('feeling', FEELING_TEXT)
   if (noSpacer) f.row.children.pop()          // a row with no ml-auto at all
+  if (decoy) {                                // an ml-auto nested inside a button
+    const inner = new N('span'); inner.setAttribute('class', 'ml-auto')
+    f.row.querySelector('button[aria-label="Share this feeling"]').appendChild(inner)
+  }
   document.body.appendChild(q.article); document.body.appendChild(f.article)
 
   const calls = []
@@ -180,7 +184,19 @@ console.log('\n═══ 4. a row with no ml-auto still gets the button ══�
   ok(b && idxOf(feeling.row, b) === feeling.row.children.length - 1, 'fallback: it goes last')
 }
 
-console.log('\n═══ 5. a re-render never stacks a second button ═══')
+console.log('\n═══ 5. an ml-auto nested inside a button is not mistaken for the spacer ═══')
+{
+  const { feeling } = load({ decoy: true }); await settle()
+  const b = commentBtn(feeling.row)
+  const real = feeling.row.children.find(c => (c.getAttribute?.('class') || '').split(/\s+/).includes('ml-auto'))
+  ok(!!b, 'decoy: the button was still added')
+  ok(real && b && idxOf(feeling.row, b) < idxOf(feeling.row, real),
+    'decoy: still lands before the row\'s OWN ml-auto child')
+  ok(real && idxOf(feeling.row, real) === feeling.row.children.length - 1,
+    'decoy: nothing after ml-auto')
+}
+
+console.log('\n═══ 6. a re-render never stacks a second button ═══')
 {
   const { feeling } = load(); await settle()
   const before = feeling.row.children.length
@@ -189,7 +205,7 @@ console.log('\n═══ 5. a re-render never stacks a second button ═══')
     'exactly one 💬 button', String(before))
 }
 
-console.log('\n═══ 6. the stylesheet carries the rules that keep it in the card ═══')
+console.log('\n═══ 7. the stylesheet carries the rules that keep it in the card ═══')
 {
   const { document } = load(); await settle()
   const css = document.head.querySelectorAll('style').map(s => s.textContent).join('')

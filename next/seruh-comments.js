@@ -403,10 +403,20 @@
            room at all, so on a nowrap flex line the new button is
            pushed clean outside the card. Slot in ahead of that spacer
            instead: 💬 joins Copy and Share on the left, ··· stays
-           pinned right, and the order reads the way it looks. */
-        var spacer = row.querySelector('.ml-auto');
-        if (spacer && spacer.parentElement === row) row.insertBefore(b, spacer);
-        else row.appendChild(b);
+           pinned right, and the order reads the way it looks.
+
+           Scanned over the row's own children rather than with
+           querySelector('.ml-auto'), which also reaches inside the
+           buttons — an ml-auto on something nested would fail the
+           parent check and drop us straight back onto the append
+           that caused this bug. */
+        var kids = row.children, spacer = null;
+        for (var k = 0; k < kids.length; k++) {
+          if ((' ' + (kids[k].getAttribute('class') || '') + ' ').indexOf(' ml-auto ') > -1) {
+            spacer = kids[k]; break;
+          }
+        }
+        if (spacer) row.insertBefore(b, spacer); else row.appendChild(b);
 
         var cargs = {}; cargs[RPCS[kind].key] = id;
         rpc(RPCS[kind].count, cargs)
