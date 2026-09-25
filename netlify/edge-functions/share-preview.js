@@ -20,7 +20,7 @@
 //   · a non-HTML or unexpected response is passed straight through.
 // ─────────────────────────────────────────────────────────────
 
-import { parseTarget, buildMeta, injectMeta } from '../lib/share-meta.mjs'
+import { parseTarget, buildMeta, injectMeta, injectWidget } from '../lib/share-meta.mjs'
 
 export const config = {
   path: ['/', '/daily', '/q/*', '/f/*', '/mood/*', '/c/*'],
@@ -107,7 +107,7 @@ export default async function handler(request, context) {
 
     const meta = buildMeta({ target, item, url: url.toString() })
     const html = await response.text()
-    const injected = injectMeta(html, meta)
+    const injected = injectWidget(injectMeta(html, meta))
 
     const headers = new Headers(response.headers)
     headers.delete('content-length')

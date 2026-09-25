@@ -28,5 +28,8 @@ cp _redirects "$OUT/"
 # the new front end — page and its one module, no tests
 cp next/index.html next/analytics.js "$OUT/next/"
 
+# the comments widget, bolted onto the existing site at its root path
+cp next/seruh-comments.js "$OUT/seruh-comments.js"
+
 echo "published $(find "$OUT" -type f | wc -l | tr -d ' ') files:"
 find "$OUT" -type f | sort | sed 's|^|  |'
