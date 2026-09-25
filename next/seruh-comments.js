@@ -10,7 +10,8 @@
        "Copy this feeling", and a <blockquote> holding the text;
      · that text is matched against quotes_public / feelings_public
        to recover the id, because the DOM carries none of its own;
-     · a 💬 button is appended to the card's own action row;
+     · a Reply button is slotted into the card's own action row,
+       ahead of the ml-auto spacer that pins "More options" right;
      · the thread opens in an overlay attached to <body>, outside
        React's tree, so a re-render cannot tear it down mid-sentence.
 
@@ -72,9 +73,37 @@
 
   /* ── styles, borrowed from the page's own palette ── */
   var CSS = ''
-    + '.sqc-btn{display:inline-flex;align-items:center;gap:.4rem;border:0;background:none;cursor:pointer;'
-    + 'border-radius:999px;padding:.375rem .75rem;font-size:.8rem;color:#6f6674;transition:color .3s,background .3s}'
-    + '.sqc-btn:hover{color:#9a545f;background:rgba(244,227,226,.6)}'
+    /* Copy and Share are bare grey text buttons; the like pill only
+       fills with roseveil once you have actually liked something. So
+       an outlined rose chip is the one shape on the row that is not
+       already spoken for — it reads as somewhere to go rather than
+       something you have done. Colours are the site's own: rosedeep
+       #9a545f on a roseveil wash, hairline rose border. */
+    + '.sqc-btn{display:inline-flex;align-items:center;gap:.4rem;cursor:pointer;font-family:inherit;'
+    + 'border:1px solid #ecd5d5;background:#fdf6f5;border-radius:999px;padding:.32rem .68rem;'
+    + 'font-size:.8rem;line-height:1;color:#9a545f;'
+    + 'transition:background .3s,border-color .3s,color .3s}'
+    + '.sqc-btn:hover{background:#f4e3e2;border-color:#d8adb1;color:#8a4753}'
+    + '.sqc-btn:focus-visible{outline:2px solid rgba(183,110,121,.55);outline-offset:2px}'
+    + '.sqc-btn svg{flex:none}'
+    /* the count is a badge, and vanishes entirely at zero rather than
+       sitting there as a discouraging little 0 */
+    + '.sqc-n{font-variant-numeric:tabular-nums;font-size:.7rem;color:#fffdf8;background:#b76e79;'
+    + 'border-radius:999px;min-width:1.05rem;height:1.05rem;padding:0 .26rem;'
+    + 'display:inline-flex;align-items:center;justify-content:center}'
+    + '.sqc-n:empty{display:none}'
+
+    /* ── room for one more control ──────────────────────────────
+       In a lg:columns-3 wall the card's inner width is about 299px
+       and the app's own four buttons already want ~322px, so the row
+       was over budget before this widget existed — flex was shrinking
+       the like pill until "feel this too" stacked into four words.
+       nowrap stops that collapse, and wrap turns the leftover into a
+       tidy second line inside the card instead of an overflow. No
+       flex-shrink:0 here: forcing it would override how the app
+       chooses to squeeze its own buttons at narrow widths. */
+    + '[data-seruh-comments]{flex-wrap:wrap!important;row-gap:.35rem;min-width:0}'
+    + '[data-seruh-comments]>button{white-space:nowrap}'
     + '.sqc-scrim{position:fixed;inset:0;background:rgba(46,42,51,.5);backdrop-filter:blur(3px);z-index:9998;'
     + 'opacity:0;visibility:hidden;pointer-events:none;transition:opacity .22s,visibility .22s}'
     + '.sqc-scrim.on{opacity:1;visibility:visible;pointer-events:auto}'
@@ -117,6 +146,25 @@
     + '.sqc-toast{position:fixed;left:50%;bottom:26px;transform:translate(-50%,14px);z-index:10000;background:#2e2a33;'
     + 'color:#faf6ef;padding:11px 18px;border-radius:999px;font-size:.86rem;font-family:ui-sans-serif,system-ui,sans-serif;'
     + 'opacity:0;pointer-events:none;transition:.25s;max-width:88vw;text-align:center}.sqc-toast.on{opacity:1;transform:translate(-50%,0)}';
+
+  /* The app draws its icons with lucide at size 14, stroke 2. A 💬
+     emoji beside those hairline strokes reads as a foreign object
+     pasted onto the card rather than one of its own controls, which
+     is most of why the button did not look like a comment section.
+     This is lucide's message-circle, built as real SVG so it inherits
+     currentColor and matches Copy and Share exactly. */
+  var SVGNS = 'http://www.w3.org/2000/svg';
+  function bubble() {
+    var s = document.createElementNS(SVGNS, 'svg');
+    var a = { width: '14', height: '14', viewBox: '0 0 24 24', fill: 'none',
+      stroke: 'currentColor', 'stroke-width': '2', 'stroke-linecap': 'round',
+      'stroke-linejoin': 'round', 'aria-hidden': 'true' };
+    Object.keys(a).forEach(function (k) { s.setAttribute(k, a[k]); });
+    var path = document.createElementNS(SVGNS, 'path');
+    path.setAttribute('d', 'M7.9 20A9 9 0 1 0 4 16.1L2 22Z');
+    s.appendChild(path);
+    return s;
+  }
 
   function el(tag, props, kids) {
     var n = document.createElement(tag);
@@ -377,13 +425,33 @@
 
       row.setAttribute(MARK, '1');
       (function (kind, id, text, row) {
-        var count = el('span', { text: '' });
-        var b = el('button', { class: 'sqc-btn', type: 'button',
+        var count = el('span', { class: 'sqc-n', text: '' });
+        var b = el('button', { class: 'sqc-btn', type: 'button', title: 'Comments',
           'aria-label': 'Comments on this ' + kind });
-        b.appendChild(document.createTextNode('\u{1F4AC} '));
+        b.appendChild(bubble());
+        b.appendChild(document.createTextNode('Reply'));
         b.appendChild(count);
         b.addEventListener('click', function (e) { e.preventDefault(); render(kind, id, text, count); });
-        row.appendChild(b);
+        /* The app's action row ends with a "More options" button
+           carrying Tailwind's ml-auto, which eats every spare pixel to
+           pin itself to the right edge. Appending after it leaves no
+           room at all, so on a nowrap flex line the new button is
+           pushed clean outside the card. Slot in ahead of that spacer
+           instead: Reply joins Copy and Share on the left, ··· stays
+           pinned right, and the order reads the way it looks.
+
+           Scanned over the row's own children rather than with
+           querySelector('.ml-auto'), which also reaches inside the
+           buttons — an ml-auto on something nested would fail the
+           parent check and drop us straight back onto the append
+           that caused this bug. */
+        var kids = row.children, spacer = null;
+        for (var k = 0; k < kids.length; k++) {
+          if ((' ' + (kids[k].getAttribute('class') || '') + ' ').indexOf(' ml-auto ') > -1) {
+            spacer = kids[k]; break;
+          }
+        }
+        if (spacer) row.insertBefore(b, spacer); else row.appendChild(b);
 
         var cargs = {}; cargs[RPCS[kind].key] = id;
         rpc(RPCS[kind].count, cargs)
