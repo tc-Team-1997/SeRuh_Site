@@ -121,6 +121,21 @@ export function buildMeta({ target, item, url }) {
 }
 
 /**
+ * Bolt the comments widget onto the deployed app.
+ *
+ * The app's source does not exist, so the only place to add a script
+ * to it is on the way out. Deferred, so it never delays first paint,
+ * and appended last so a failure to fetch it leaves the page whole.
+ */
+export function injectWidget(html, src = '/seruh-comments.js') {
+  if (typeof html !== 'string') return html;
+  const close = html.search(/<\/body>/i);
+  if (close === -1) return html;
+  if (html.includes(src)) return html;
+  return html.slice(0, close) + `<script src="${src}" defer></script>\n` + html.slice(close);
+}
+
+/**
  * Splice the tags into <head>, replacing the build's own <title> and
  * meta description so a shared quote does not preview under the
  * generic homepage title. Returns the original HTML untouched if the

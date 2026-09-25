@@ -8,7 +8,7 @@
 // card, and that injection cannot corrupt the page.
 // ─────────────────────────────────────────────────────────────
 
-import { parseTarget, flatten, buildMeta, injectMeta, describe as describeTarget } from './share-meta.mjs'
+import { parseTarget, flatten, buildMeta, injectMeta, injectWidget, describe as describeTarget } from './share-meta.mjs'
 
 let pass = 0, fail = 0
 const ok = (cond, label, extra = '') => {
@@ -85,7 +85,20 @@ ok(flatten(long, 200).endsWith('…'), 'marks the cut')
 ok(!flatten('short line', 200).endsWith('…'), 'no ellipsis when it fits')
 ok(flatten('  spaced   out \n\n line  ') === 'spaced out line', 'whitespace collapsed')
 
-console.log('\n═══ 8. malformed input is survivable ═══')
+console.log('\n═══ 8. the comments widget is bolted on safely ═══')
+const withWidget = injectWidget(HTML)
+ok(withWidget.includes('<script src="/seruh-comments.js" defer></script>'), 'script tag injected')
+ok(withWidget.indexOf('seruh-comments') < withWidget.indexOf('</body>'), 'it lands inside <body>')
+ok(withWidget.includes('<div id="root"></div>'), 'the app markup is untouched')
+ok(withWidget.includes('defer'), 'deferred, so it never delays first paint')
+ok(injectWidget(withWidget) === withWidget, 'injecting twice does not duplicate it')
+ok(injectWidget('no body here') === 'no body here', 'a document with no <body> is returned untouched')
+ok(injectWidget(null) === null, 'null is returned untouched')
+const both = injectWidget(injectMeta(HTML, m))
+ok(both.includes('og:title') && both.includes('seruh-comments.js') && both.includes('<div id="root"></div>'),
+  'meta and widget compose without damaging the page')
+
+console.log('\n═══ 9. malformed input is survivable ═══')
 let threw = false
 try {
   parseTarget(undefined); parseTarget(null); flatten(null); flatten(undefined)
