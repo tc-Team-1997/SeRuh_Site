@@ -72,6 +72,17 @@ for (const [fn, args, label] of [
 const after = await rest('feelings_public?select=id&order=created_at.desc&limit=40');
 ok(after.length === all.length, 'a stranger calling delete changed nothing', `${all.length} → ${after.length}`);
 
+console.log('\n═══ comments on quotes (phase 12) ═══');
+const aQuote = (await rpc('get_random_quote', { p_exclude: null })).id;
+for (const [fn, args, label] of [
+  ['get_quote_comments', { p_quote: aQuote, p_visitor: strangerVisitor, p_page: 0 }, 'read comments'],
+  ['count_quote_comments', { p_quote: aQuote }, 'count comments'],
+  ['add_quote_comment', { p_quote: aQuote, p_visitor: strangerVisitor, p_body: 'x' }, 'write a comment'],
+]) {
+  let status = 200; try { await rpc(fn, args) } catch (e) { status = e.status }
+  ok(status === 404 || status < 500, `${label} (${fn}): ${status === 404 ? '404 → UI hides itself' : 'live'}`, String(status));
+}
+
 console.log('\n═══ report path (exists today) ═══');
 let rs=0; try{await rpc('report_feeling',{p_feeling:'00000000-0000-0000-0000-000000000000',p_visitor:'00000000-0000-0000-0000-000000000000',p_reason:'Spam'})}catch(e){rs=e.status}
 ok(rs!==404,'report_feeling exists (rejects a bogus id, as it should)',String(rs));

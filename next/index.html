@@ -188,6 +188,12 @@ h1{font-family:"Fraunces",serif; font-weight:500; font-size:clamp(2.05rem,8vw,2.
 .stat b{display:block;font-family:"Fraunces",serif;font-size:1.5rem;font-weight:500;line-height:1}
 .stat span{font-size:.75rem;color:var(--faint)}
 
+.cmt{border-top:1px solid var(--line);padding:13px 0 0;margin-top:13px}
+.cmt p{margin:0 0 5px;font-family:"Fraunces",serif;font-size:.98rem;line-height:1.5}
+.cmt .who{font-size:.73rem;color:var(--faint);display:flex;gap:10px;align-items:center}
+.cmt .who button{font-size:.73rem;font-weight:600;color:var(--soft)}
+.cmt .who button:hover{color:var(--ember)}
+
 /* ── toast ──────────────────────────────────────────────── */
 #toast{position:fixed; left:50%; bottom:96px; transform:translate(-50%,16px); z-index:80;
   background:var(--ink); color:var(--ground); padding:12px 18px; border-radius:999px;
@@ -294,7 +300,9 @@ footer{padding:36px 0 120px; text-align:center; color:var(--faint); font-size:.8
       <q id="randomQ">…</q>
       <div style="display:flex;gap:8px;flex-wrap:wrap">
         <button class="btn btn-ghost" id="randomBtn" style="padding:10px 18px;font-size:.88rem">🎲 Another thought</button>
+        <button class="btn btn-ghost" id="cmtBtn" style="padding:10px 18px;font-size:.88rem" hidden>💬 Comments</button>
       </div>
+      <div id="cmtBox" hidden style="margin-top:16px"></div>
     </div>
   </section>
 
@@ -389,7 +397,7 @@ const store = {
    ship migration by migration, and a 404 here means "not switched on
    yet", not "broken". Anything unavailable hides itself instead of
    showing a dead control. */
-const caps = { reactions: null, prompts: null, echoes: null };
+const caps = { reactions: null, prompts: null, echoes: null, comments: null };
 
 async function rest(path, { method = 'GET', body } = {}) {
   const res = await fetch(`${SUPABASE_URL}/rest/v1/${path}`, {
@@ -425,6 +433,10 @@ const api = {
     }
     return rpc('toggle_feeling_like', { p_feeling: id, p_visitor: visitorId });
   },
+  comments: (q) => rpc('get_quote_comments', { p_quote: q, p_visitor: visitorId, p_page: 0 }),
+  comment: (q, body) => rpc('add_quote_comment', { p_quote: q, p_visitor: visitorId, p_body: body }),
+  delComment: (id) => rpc('delete_my_quote_comment', { p_id: id, p_visitor: visitorId }),
+  reportComment: (id, reason) => rpc('report_quote_comment', { p_id: id, p_visitor: visitorId, p_reason: reason }),
   mine: () => rpc('get_my_submissions', { p_visitor: visitorId }),
   remove: (id) => rpc('delete_my_feeling', { p_id: id, p_visitor: visitorId }),
   setVisibility: (id, v) => rpc('set_feeling_visibility', { p_id: id, p_visitor: visitorId, p_visibility: v }),
@@ -545,6 +557,78 @@ function replySheet(t) {
   box.append(ta, send);
   openSheet('Say something back', box);
 }
+
+/* ── comments on a quote ───────────────────────────────────────
+   Public, unlike a reply to a feeling — a quote has no author among
+   the people reading it, so there is nobody to send a private note
+   to. Everyone shows as Anonymous because the table has no column
+   that could hold a name. */
+let cmtOpen = false;
+
+async function renderComments(quoteId) {
+  const box = $('#cmtBox');
+  let rows = [];
+  try { rows = await api.comments(quoteId) || []; }
+  catch (e) { if (e.status === 404) { caps.comments = false; $('#cmtBtn').hidden = true; box.hidden = true; return; } }
+
+  const list = el('div');
+  if (!rows.length) {
+    list.append(el('p', { className: 'sub', style: 'margin:0 0 12px', textContent: 'No one has said anything yet. You could be first.' }));
+  } else {
+    rows.forEach(c => {
+      const who = el('div', { className: 'who' }, el('span', { textContent: `Anonymous · ${when(c.created_at)}` }));
+      if (c.mine) {
+        const d = el('button', { type: 'button', textContent: 'Delete' });
+        d.addEventListener('click', async () => {
+          try { await api.delComment(c.id); A.trackEvent('comment_deleted', {}); toast('Gone.'); renderComments(quoteId); }
+          catch { toast("Couldn't delete that."); }
+        });
+        who.append(d);
+      } else {
+        const r = el('button', { type: 'button', textContent: 'Report' });
+        r.addEventListener('click', async () => {
+          try { await api.reportComment(c.id, 'Other'); A.trackReportSubmitted('comment'); toast('Thank you. Someone will look.'); }
+          catch { toast("Couldn't send that report."); }
+        });
+        who.append(r);
+      }
+      list.append(el('div', { className: 'cmt' }, el('p', { className: 'thought', textContent: c.body }), who));
+    });
+  }
+
+  const ta = el('textarea', { maxLength: 500, placeholder: 'Say something about this…',
+    style: 'width:100%;min-height:78px;border:1px solid var(--line);border-radius:12px;background:var(--sunk);padding:11px 13px;font-family:Fraunces,serif;font-size:.98rem;resize:vertical;margin-top:12px' });
+  ta.setAttribute('aria-label', 'Your comment');
+  const send = el('button', { className: 'btn btn-primary', type: 'button',
+    style: 'margin-top:10px;padding:10px 20px;font-size:.88rem', textContent: 'Comment anonymously' });
+  send.addEventListener('click', async () => {
+    const v = ta.value.trim();
+    if (v.length < 2) { toast('A few words, whenever you’re ready.'); ta.focus(); return; }
+    send.disabled = true; send.textContent = 'Posting…';
+    try {
+      const r = await api.comment(quoteId, v);
+      if (r && r.ok === false) toast(r.message || "That one couldn’t be posted.");
+      else { A.trackEvent('comment_submitted', { length_bucket: A.lengthBucket(v) }); toast(r.message || 'Posted. 🤍'); ta.value = ''; renderComments(quoteId); }
+    } catch (e) {
+      toast(e.status === 404 ? 'Comments are still being switched on.' : 'Something went wrong. Please try again.');
+    } finally { send.disabled = false; send.textContent = 'Comment anonymously'; }
+  });
+
+  box.replaceChildren(list, ta, send);
+  $('#cmtBtn').textContent = `💬 Comments${rows.length ? ' · ' + rows.length : ''}`;
+}
+
+async function detectComments() {
+  try { await api.comments('00000000-0000-0000-0000-000000000000'); caps.comments = true; }
+  catch (e) { caps.comments = e.status !== 404; }
+  $('#cmtBtn').hidden = caps.comments === false;
+}
+
+$('#cmtBtn').addEventListener('click', () => {
+  cmtOpen = !cmtOpen;
+  $('#cmtBox').hidden = !cmtOpen;
+  if (cmtOpen) { A.trackEvent('comments_opened', {}); renderComments($('#randomQ').dataset.id); }
+});
 
 /* ── your own thoughts ──────────────────────────────────────────
    The privacy section promises you can change who sees a thought or
@@ -810,7 +894,16 @@ async function loadRandom() {
     $('#randomQ').dataset.id = q?.id || '';
   } catch { $('#randomQ').textContent = 'Couldn’t reach one just now.'; }
 }
-$('#randomBtn').addEventListener('click', () => { A.trackRandomThought(); const id = $('#randomQ').dataset.id || null; api.random(id).then(q => { $('#randomQ').textContent = q?.quote || '…'; $('#randomQ').dataset.id = q?.id || ''; }).catch(() => {}); });
+$('#randomBtn').addEventListener('click', () => {
+  A.trackRandomThought();
+  const id = $('#randomQ').dataset.id || null;
+  api.random(id).then(q => {
+    $('#randomQ').textContent = q?.quote || '…';
+    $('#randomQ').dataset.id = q?.id || '';
+    $('#cmtBtn').textContent = '💬 Comments';
+    if (cmtOpen) renderComments(q?.id);       // the panel follows the quote
+  }).catch(() => {});
+});
 
 async function loadDaily() {
   const box = $('#dailyBox');
@@ -879,6 +972,7 @@ async function loadReplies() {
   buildExplore();
   loadCategories();
   await detectEchoes();
+  await detectComments();
   loadFeed();
   await loadReplies();
   loadMine();
