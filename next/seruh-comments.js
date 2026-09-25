@@ -10,7 +10,8 @@
        "Copy this feeling", and a <blockquote> holding the text;
      · that text is matched against quotes_public / feelings_public
        to recover the id, because the DOM carries none of its own;
-     · a 💬 button is appended to the card's own action row;
+     · a 💬 button is slotted into the card's own action row,
+       ahead of the ml-auto spacer that pins "More options" right;
      · the thread opens in an overlay attached to <body>, outside
        React's tree, so a re-render cannot tear it down mid-sentence.
 
@@ -72,9 +73,22 @@
 
   /* ── styles, borrowed from the page's own palette ── */
   var CSS = ''
-    + '.sqc-btn{display:inline-flex;align-items:center;gap:.4rem;border:0;background:none;cursor:pointer;'
-    + 'border-radius:999px;padding:.375rem .75rem;font-size:.8rem;color:#6f6674;transition:color .3s,background .3s}'
+    + '.sqc-btn{display:inline-flex;align-items:center;gap:.3rem;border:0;background:none;cursor:pointer;'
+    + 'border-radius:999px;padding:.375rem .55rem;font-size:.8rem;color:#6f6674;line-height:1;'
+    + 'transition:color .3s,background .3s}'
     + '.sqc-btn:hover{color:#9a545f;background:rgba(244,227,226,.6)}'
+
+    /* ── room for one more control ──────────────────────────────
+       In a lg:columns-3 wall the card's inner width is about 299px
+       and the app's own four buttons already want ~322px, so the row
+       was over budget before this widget existed — flex was shrinking
+       the like pill until "feel this too" stacked into four words.
+       nowrap stops that collapse, and wrap turns the leftover into a
+       tidy second line inside the card instead of an overflow. No
+       flex-shrink:0 here: forcing it would override how the app
+       chooses to squeeze its own buttons at narrow widths. */
+    + '[data-seruh-comments]{flex-wrap:wrap!important;row-gap:.35rem;min-width:0}'
+    + '[data-seruh-comments]>button{white-space:nowrap}'
     + '.sqc-scrim{position:fixed;inset:0;background:rgba(46,42,51,.5);backdrop-filter:blur(3px);z-index:9998;'
     + 'opacity:0;visibility:hidden;pointer-events:none;transition:opacity .22s,visibility .22s}'
     + '.sqc-scrim.on{opacity:1;visibility:visible;pointer-events:auto}'
@@ -383,7 +397,16 @@
         b.appendChild(document.createTextNode('\u{1F4AC} '));
         b.appendChild(count);
         b.addEventListener('click', function (e) { e.preventDefault(); render(kind, id, text, count); });
-        row.appendChild(b);
+        /* The app's action row ends with a "More options" button
+           carrying Tailwind's ml-auto, which eats every spare pixel to
+           pin itself to the right edge. Appending after it leaves no
+           room at all, so on a nowrap flex line the new button is
+           pushed clean outside the card. Slot in ahead of that spacer
+           instead: 💬 joins Copy and Share on the left, ··· stays
+           pinned right, and the order reads the way it looks. */
+        var spacer = row.querySelector('.ml-auto');
+        if (spacer && spacer.parentElement === row) row.insertBefore(b, spacer);
+        else row.appendChild(b);
 
         var cargs = {}; cargs[RPCS[kind].key] = id;
         rpc(RPCS[kind].count, cargs)
