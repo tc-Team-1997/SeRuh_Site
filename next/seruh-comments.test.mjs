@@ -112,6 +112,7 @@ function load({ noSpacer = false, decoy = false } = {}) {
   document.body = document.appendChild(new N('body'))
   document.readyState = 'complete'
   document.createElement = t => new N(t)
+  document.createElementNS = (_ns, t) => new N(t)
   document.createTextNode = t => new T(t)
   document.addEventListener = () => {}
 
@@ -205,13 +206,31 @@ console.log('\n═══ 6. a re-render never stacks a second button ═══')
     'exactly one 💬 button', String(before))
 }
 
-console.log('\n═══ 7. the stylesheet carries the rules that keep it in the card ═══')
+console.log('\n═══ 7. it looks like a comment control, not a pasted-on emoji ═══')
+{
+  const { feeling } = load(); await settle()
+  const b = commentBtn(feeling.row)
+  ok(!!b.querySelector('svg'), 'the icon is real SVG, in the app\'s own icon family')
+  ok(b.querySelector('svg')?.getAttribute('stroke') === 'currentColor', 'it inherits the button colour')
+  ok(b.querySelector('svg')?.getAttribute('width') === '14', 'sized like the app\'s lucide icons')
+  ok(!/[\u{1F300}-\u{1FAFF}]/u.test(b.textContent), 'no emoji left in the button', JSON.stringify(b.textContent))
+  ok(b.textContent.includes('Reply'), 'it says what it is, the way Copy and Share do')
+  const badge = b.children.find(c => (c.getAttribute?.('class') || '').includes('sqc-n'))
+  ok(!!badge, 'the count is a badge of its own')
+  ok(badge?.textContent === '3', 'the badge carries the count', JSON.stringify(badge?.textContent))
+}
+
+console.log('\n═══ 8. the stylesheet carries the rules that keep it in the card ═══')
 {
   const { document } = load(); await settle()
   const css = document.head.querySelectorAll('style').map(s => s.textContent).join('')
   ok(css.includes('[data-seruh-comments]{flex-wrap:wrap'), 'the row may wrap rather than overflow')
   ok(css.includes('[data-seruh-comments]>button{white-space:nowrap'), 'button text never stacks into single words')
   ok(!css.includes('flex-shrink:0'), 'the app is left free to squeeze its own buttons')
+  ok(css.includes('.sqc-n:empty{display:none}'), 'a zero count shows no badge at all')
+  ok(css.includes('#9a545f') && css.includes('#b76e79') && css.includes('#f4e3e2'),
+    'the chip uses the site\'s own rose, rosedeep and roseveil')
+  ok(css.includes('.sqc-btn:focus-visible'), 'the chip has a visible focus ring')
   ok((css.match(/\{/g) || []).length === (css.match(/\}/g) || []).length, 'braces balance')
 }
 
