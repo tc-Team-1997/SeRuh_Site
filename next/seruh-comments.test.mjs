@@ -234,5 +234,33 @@ console.log('\n═══ 8. the stylesheet carries the rules that keep it in the
   ok((css.match(/\{/g) || []).length === (css.match(/\}/g) || []).length, 'braces balance')
 }
 
+console.log('\n═══ 9. no rule may erase a size the app set on itself ═══')
+{
+  const { document } = load(); await settle()
+  const css = document.head.querySelectorAll('style').map(s => s.textContent).join('')
+
+  // flatten @media, then split into selector/body pairs
+  const flat = css.replace(/@media[^{]+\{((?:[^{}]*\{[^{}]*\})*)\}/g, '$1')
+  const rules = [...flat.matchAll(/([^{}]+)\{([^{}]*)\}/g)].map(m => ({ sel: m[1].trim(), body: m[2] }))
+  ok(rules.length > 10, 'the stylesheet parsed into rules', String(rules.length))
+
+  /* This sheet is appended after the app's, so a bare single class
+     ties with Tailwind's text-[…] and wins on source order — it wipes
+     the explicit size rather than adjusting it. Anything sizing the
+     app's own type must name the element (blockquote.font-display)
+     so the intent is deliberate and visible. */
+  const offenders = rules
+    .filter(r => /font-size/.test(r.body))
+    .flatMap(r => r.sel.split(',').map(x => x.trim()))
+    .filter(sel => !sel.startsWith('.sqc-'))
+    .filter(sel => /^\.[A-Za-z0-9_\\:-]+$/.test(sel))
+  ok(offenders.length === 0,
+    'no bare app class sets font-size', offenders.join(' '))
+  ok(!/(^|[^a-z-])\.font-display\s*\{/.test(css),
+    'specifically, no blanket .font-display size — it flattened the wordmark')
+  ok(css.includes('blockquote.font-display{font-size:1.04rem'),
+    'the deliberate, element-named card-quote size is still there')
+}
+
 console.log(`\n───────────────────────────────\n  ${pass} passed, ${fail} failed\n`)
 process.exit(fail ? 1 : 0)

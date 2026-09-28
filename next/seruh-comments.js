@@ -136,8 +136,18 @@
        section padding to match, so a phone shows very few words per
        screen and the gaps read as empty rather than calm. This trims
        both a notch. It is one block on purpose — every number is in
-       one place, so it is easy to tune or delete. */
-    + '.font-display{font-size:0.94em}'
+       one place, so it is easy to tune or delete.
+
+       There is no blanket `.font-display{font-size:…}` here, and
+       there must not be. This stylesheet is appended to <head> after
+       the app's, so a bare `.font-display` ties on specificity with
+       Tailwind's `text-[…]` and wins on source order — it does not
+       shrink an explicit size, it erases it. 87 elements on this site
+       carry an explicit display size and exactly one does not, so
+       such a rule collapses almost every heading to the inherited
+       body size. That is what flattened the SeRuh wordmark from
+       clamp(4.2rem,14vw,8.5rem) to about 15px. Size display text by
+       naming the element, the way the blockquote rule below does. */
     + 'blockquote.font-display{font-size:1.04rem;line-height:1.5}'
     + '@media(min-width:640px){blockquote.font-display{font-size:1.1rem}}'
     + 'section.py-24,div.py-24{padding-top:3.25rem;padding-bottom:3.25rem}'
