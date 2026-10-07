@@ -113,6 +113,11 @@ Deno.serve(async (req) => {
     // a gentle message, and the feature stays quietly dead. See
     // seruh-phase14-migration.sql.
     const model = s.model || "gemini-3.5-flash-lite";
+    // "minimal" is the least thinking on offer and is what Flash-Lite already
+    // defaults to; 3.x Flash rejects the value outright. The model is a
+    // settings row anyone can change, so choose per model rather than send one
+    // value that 400s half of them.
+    const thinking = /flash-lite/i.test(model) ? "minimal" : "low";
     const res = await fetch(
       `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent?key=${key}`,
       {
@@ -143,7 +148,7 @@ Deno.serve(async (req) => {
             // value both accept, so switching model never 400s the function.
             // Gemini 3 takes thinkingLevel; thinkingBudget is the 2.5 field
             // and the API errors if the two are mixed.
-            thinkingConfig: { thinkingLevel: "low" },
+            thinkingConfig: { thinkingLevel: thinking },
             responseMimeType: "application/json",
           },
         }),
@@ -162,7 +167,23 @@ Deno.serve(async (req) => {
     }
 
     const payload = await res.json();
-    const raw = payload?.candidates?.[0]?.content?.parts?.[0]?.text ?? "";
+
+    // A thinking model answers in several parts, and the reasoning ones carry
+    // thought: true. Their order is not guaranteed, so reading parts[0]
+    // returns the model's thinking about as often as it returns the quote —
+    // which is exactly what made this fail at random. gemini-2.0-flash never
+    // sent thought parts, so taking the first one was correct right up until
+    // it silently was not.
+    const parts: Array<{ text?: string; thought?: boolean }> =
+      payload?.candidates?.[0]?.content?.parts ?? [];
+    let raw = parts
+      .filter((p) => p && typeof p.text === "string" && !p.thought)
+      .map((p) => p.text)
+      .join("")
+      .trim();
+    // responseMimeType should rule this out, but a fenced block costs one line
+    // to survive and a whole generation to lose.
+    raw = raw.replace(/^```(?:json)?\s*/i, "").replace(/\s*```$/i, "").trim();
     let parsed: { ok?: boolean; quote?: string; message?: string } = {};
     try { parsed = JSON.parse(raw) } catch { /* fall through */ }
 
@@ -189,7 +210,11 @@ Deno.serve(async (req) => {
       // invisible from the logs — which is how this stayed hidden.
       console.error("empty generation",
         payload?.candidates?.[0]?.finishReason ?? "no finishReason",
-        JSON.stringify(payload?.usageMetadata ?? {}));
+        JSON.stringify(payload?.usageMetadata ?? {}),
+        "parts=" + JSON.stringify(parts.map((p) => ({
+          thought: !!p.thought, len: (p.text ?? "").length,
+        }))),
+        "raw=" + JSON.stringify(raw.slice(0, 160)));
       await service.from("ai_generations").insert({
         user_id: userId, visitor_id: visitor, input_text: text.slice(0, 1000),
         mood: vMood, style: vStyle, length: vLength,
