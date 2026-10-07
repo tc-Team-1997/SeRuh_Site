@@ -495,6 +495,45 @@
       .catch(function () { /* comments unavailable — leave the page untouched */ });
   }
 
+  /* ── the generator's input cap ──────────────────────────────
+     "What are you feeling?" is <textarea id="ai-feeling"> carrying
+     maxLength 500, compiled into the bundle, so the browser stops
+     you typing long before the server is ever asked. The real limit
+     is ai_settings.max_input_length; this only has to be large
+     enough that the browser is not the one saying no.
+
+     Characters, not words — the function tests text.length, so 2000
+     here is roughly 350 words.
+
+     Deliberately independent of the comments data. The observer for
+     the cards is attached only after quotes_public and
+     feelings_public both load; a failure to reach those should not
+     also leave this box short, so this gets its own. */
+  var AI_INPUT_MAX = 2000;      // keep in step with ai_settings.max_input_length
+  var AI_INPUT_ID  = 'ai-feeling';
+
+  function widenGenerator() {
+    var ta = document.getElementById(AI_INPUT_ID);
+    if (!ta) return;
+    // React sets maxLength once at mount and never revisits it — the prop
+    // is a literal that cannot change — so this holds until the component
+    // remounts, which is what the observer below is for. Never narrow an
+    // attribute that is already as generous as we want.
+    if (Number(ta.getAttribute('maxlength')) >= AI_INPUT_MAX) return;
+    ta.setAttribute('maxlength', String(AI_INPUT_MAX));
+  }
+
+  var widenT;
+  function scheduleWiden() {
+    clearTimeout(widenT);
+    widenT = setTimeout(function () { try { widenGenerator(); } catch (e) {} }, 150);
+  }
+
+  try {
+    widenGenerator();
+    new MutationObserver(scheduleWiden).observe(document.body, { childList: true, subtree: true });
+  } catch (e) { /* never break the page */ }
+
   try {
     if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', start);
     else start();
