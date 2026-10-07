@@ -59,7 +59,7 @@ Deno.serve(async (req) => {
 
     // ── settings + validation ────────────────────────────────
     const { data: settings } = await service.from("ai_settings").select("*").eq("id", 1).single();
-    const s = settings ?? { model: "gemini-3.8-flash", guest_daily_limit: 5, user_daily_limit: 25, max_input_length: 2000, max_output_words: 60, temperature: 0.9 };
+    const s = settings ?? { model: "gemini-3.5-flash-lite", guest_daily_limit: 5, user_daily_limit: 25, max_input_length: 2000, max_output_words: 60, temperature: 0.9 };
 
     const text = String(feeling ?? "").trim();
     if (text.length < 3) return json({ error: true, message: "Tell SeRuh a little more about what you're feeling." }, 400);
@@ -112,7 +112,7 @@ Deno.serve(async (req) => {
     // id does not fail loudly — it 404s, which this function turns into
     // a gentle message, and the feature stays quietly dead. See
     // seruh-phase14-migration.sql.
-    const model = s.model || "gemini-3.8-flash";
+    const model = s.model || "gemini-3.5-flash-lite";
     const res = await fetch(
       `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent?key=${key}`,
       {
@@ -137,10 +137,12 @@ Deno.serve(async (req) => {
             // that never reached the quote. Raising maxOutputTokens alone
             // made it worse — more budget simply bought more thinking.
             //
-            // "low" is the floor here: "minimal" is rejected on 3.x Flash and
-            // thinking cannot be switched off at all. Gemini 3 takes
-            // thinkingLevel; thinkingBudget is the 2.5 field and the API errors if
-            // the two are mixed.
+            // "low" rather than "minimal": Flash-Lite takes minimal and in
+            // fact defaults to it, but 3.x Flash rejects it outright, and the
+            // model is a settings row anyone can change. "low" is the one
+            // value both accept, so switching model never 400s the function.
+            // Gemini 3 takes thinkingLevel; thinkingBudget is the 2.5 field
+            // and the API errors if the two are mixed.
             thinkingConfig: { thinkingLevel: "low" },
             responseMimeType: "application/json",
           },
