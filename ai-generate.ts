@@ -59,7 +59,7 @@ Deno.serve(async (req) => {
 
     // ── settings + validation ────────────────────────────────
     const { data: settings } = await service.from("ai_settings").select("*").eq("id", 1).single();
-    const s = settings ?? { model: "gemini-2.0-flash", guest_daily_limit: 5, user_daily_limit: 25, max_input_length: 500, max_output_words: 60, temperature: 0.9 };
+    const s = settings ?? { model: "gemini-3.8-flash", guest_daily_limit: 5, user_daily_limit: 25, max_input_length: 500, max_output_words: 60, temperature: 0.9 };
 
     const text = String(feeling ?? "").trim();
     if (text.length < 3) return json({ error: true, message: "Tell SeRuh a little more about what you're feeling." }, 400);
@@ -108,7 +108,11 @@ Deno.serve(async (req) => {
     // ── provider call (Gemini) ───────────────────────────────
     const key = Deno.env.get("GEMINI_API_KEY");
     if (!key) throw new Error("GEMINI_API_KEY missing");
-    const model = s.model || "gemini-2.0-flash";
+    // Both fallbacks must name a model Google still serves. A retired
+    // id does not fail loudly — it 404s, which this function turns into
+    // a gentle message, and the feature stays quietly dead. See
+    // seruh-phase14-migration.sql.
+    const model = s.model || "gemini-3.8-flash";
     const res = await fetch(
       `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent?key=${key}`,
       {
