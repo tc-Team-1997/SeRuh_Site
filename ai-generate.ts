@@ -59,7 +59,7 @@ Deno.serve(async (req) => {
 
     // ── settings + validation ────────────────────────────────
     const { data: settings } = await service.from("ai_settings").select("*").eq("id", 1).single();
-    const s = settings ?? { model: "gemini-3.8-flash", guest_daily_limit: 5, user_daily_limit: 25, max_input_length: 500, max_output_words: 60, temperature: 0.9 };
+    const s = settings ?? { model: "gemini-3.8-flash", guest_daily_limit: 5, user_daily_limit: 25, max_input_length: 2000, max_output_words: 60, temperature: 0.9 };
 
     const text = String(feeling ?? "").trim();
     if (text.length < 3) return json({ error: true, message: "Tell SeRuh a little more about what you're feeling." }, 400);

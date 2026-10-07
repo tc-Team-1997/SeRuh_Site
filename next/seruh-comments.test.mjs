@@ -106,7 +106,7 @@ const FEELING_TEXT = 'Some days I just hold it together with tape.'
 const QUOTE_ID = '65f42c6e-193b-415c-bda8-e75823fba02c'
 const FEELING_ID = '069c0154-beb4-4db2-8643-d79c45652f75'
 
-function load({ noSpacer = false, decoy = false } = {}) {
+function load({ noSpacer = false, decoy = false, genMax = 500, failFetch = false } = {}) {
   const document = new N('#document')
   document.head = document.appendChild(new N('head'))
   document.body = document.appendChild(new N('body'))
@@ -115,6 +115,12 @@ function load({ noSpacer = false, decoy = false } = {}) {
   document.createElementNS = (_ns, t) => new N(t)
   document.createTextNode = t => new T(t)
   document.addEventListener = () => {}
+  document.getElementById = id => { let hit = null; walk(document, n => { if (!hit && n.getAttribute('id') === id) hit = n }); return hit }
+
+  const gen = new N('textarea')
+  gen.setAttribute('id', 'ai-feeling')
+  gen.setAttribute('maxlength', String(genMax))
+  document.body.appendChild(gen)
 
   const q = card('quote', QUOTE_TEXT), f = card('feeling', FEELING_TEXT)
   if (noSpacer) f.row.children.pop()          // a row with no ml-auto at all
@@ -127,18 +133,21 @@ function load({ noSpacer = false, decoy = false } = {}) {
   const calls = []
   const fetchStub = (url) => {
     calls.push(url)
+    if (failFetch) return Promise.reject(new Error('network down'))
     const json = url.includes('quotes_public') ? [{ id: QUOTE_ID, quote: QUOTE_TEXT }]
       : url.includes('feelings_public') ? [{ id: FEELING_ID, content: FEELING_TEXT }]
       : 3                                      // count_* RPCs
     return Promise.resolve({ ok: true, status: 200, json: () => Promise.resolve(json) })
   }
+  const observers = []
+  class Obs { constructor(cb) { this.cb = cb; observers.push(this) } observe() {} disconnect() {} }
   const store = new Map()
   const src = readFileSync(new URL('./seruh-comments.js', import.meta.url), 'utf8')
   new Function('document', 'localStorage', 'crypto', 'fetch', 'MutationObserver', 'window', src)(
     document, { getItem: k => store.get(k) ?? null, setItem: (k, v) => store.set(k, v) },
     { randomUUID: () => '11111111-2222-4333-8444-555555555555' },
-    fetchStub, class { observe() {} disconnect() {} }, {})
-  return { document, quote: q, feeling: f, calls }
+    fetchStub, Obs, {})
+  return { document, quote: q, feeling: f, calls, observers, generator: gen }
 }
 
 const settle = () => new Promise(r => setTimeout(r, 0))
@@ -260,6 +269,42 @@ console.log('\n═══ 9. no rule may erase a size the app set on itself ═�
     'specifically, no blanket .font-display size — it flattened the wordmark')
   ok(css.includes('blockquote.font-display{font-size:1.04rem'),
     'the deliberate, element-named card-quote size is still there')
+}
+
+console.log('\n═══ 10. the generator box is opened to the limit the server actually enforces ═══')
+{
+  const { generator } = load(); await settle()
+  ok(generator.getAttribute('maxlength') === '2000',
+    'maxLength 500 → 2000', generator.getAttribute('maxlength'))
+}
+{
+  // a failure to reach the comments API must not leave the box short
+  const { generator } = load({ failFetch: true }); await settle()
+  ok(generator.getAttribute('maxlength') === '2000',
+    'widened even when the comments fetch fails', generator.getAttribute('maxlength'))
+}
+{
+  // never narrow a cap the app already made more generous than ours
+  const { generator } = load({ genMax: 5000 }); await settle()
+  ok(generator.getAttribute('maxlength') === '5000',
+    'an already-larger cap is left alone', generator.getAttribute('maxlength'))
+}
+{
+  // React remounting the textarea puts 500 back; the observer must catch it
+  const { document, generator, observers } = load(); await settle()
+  generator.setAttribute('maxlength', '500')
+  ok(observers.length >= 1, 'an observer was registered for the box')
+  observers.forEach(o => { try { o.cb([], o) } catch (e) {} })
+  await new Promise(r => setTimeout(r, 200))
+  ok(generator.getAttribute('maxlength') === '2000',
+    'a remount back to 500 is corrected', generator.getAttribute('maxlength'))
+}
+{
+  const { document } = load(); await settle()
+  const src = readFileSync(new URL('./seruh-comments.js', import.meta.url), 'utf8')
+  ok(/var AI_INPUT_MAX = 2000;/.test(src),
+    'the limit lives in one named constant, not scattered literals')
+  ok(!document.getElementById('nope'), 'a missing box is simply skipped, never thrown on')
 }
 
 console.log(`\n───────────────────────────────\n  ${pass} passed, ${fail} failed\n`)
