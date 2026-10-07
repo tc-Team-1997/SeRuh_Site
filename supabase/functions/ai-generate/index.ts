@@ -33,6 +33,10 @@ const json = (body: unknown, status = 200) =>
   new Response(JSON.stringify(body), { status, headers: { ...CORS, "Content-Type": "application/json" } });
 
 const GENTLE_FAIL = "SeRuh couldn't find the words this time. Please try again. ❤️";
+// Being busy is not the writer's fault, and GENTLE_FAIL reads as though
+// it were — as though the words they chose had been refused. Say what is
+// actually true instead, so the person waits rather than rewrites.
+const BUSY_FAIL = "SeRuh is thinking a little slowly right now. Give it a few seconds and try again. 🕊️";
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: CORS });
@@ -114,12 +118,21 @@ Deno.serve(async (req) => {
     // seruh-phase14-migration.sql.
     const model = s.model || "gemini-3.5-flash-lite";
     // "minimal" is the least thinking on offer and is what Flash-Lite already
-    // defaults to; 3.x Flash rejects the value outright. The model is a
-    // settings row anyone can change, so choose per model rather than send one
-    // value that 400s half of them.
-    const thinking = /flash-lite/i.test(model) ? "minimal" : "low";
-    const res = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent?key=${key}`,
+    // defaults to; 3.x Flash rejects the value outright. The model can change
+    // between attempts, so the level is derived from whichever one is in hand
+    // rather than fixed once.
+    const levelFor = (m: string) => /flash-lite/i.test(m) ? "minimal" : "low";
+
+    // Flash-Lite and Flash are separate capacity pools. When the configured
+    // one is saturated, moving across beats telling someone to come back
+    // later — the quote is a sentence, and either model writes it well.
+    const SIBLING: Record<string, string> = {
+      "gemini-3.5-flash-lite": "gemini-3.5-flash",
+      "gemini-3.1-flash-lite": "gemini-3.5-flash-lite",
+      "gemini-3.5-flash": "gemini-3.5-flash-lite",
+    };
+    const request = (m: string) => fetch(
+      `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(m)}:generateContent?key=${key}`,
       {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -142,28 +155,50 @@ Deno.serve(async (req) => {
             // that never reached the quote. Raising maxOutputTokens alone
             // made it worse — more budget simply bought more thinking.
             //
-            // "low" rather than "minimal": Flash-Lite takes minimal and in
-            // fact defaults to it, but 3.x Flash rejects it outright, and the
-            // model is a settings row anyone can change. "low" is the one
-            // value both accept, so switching model never 400s the function.
-            // Gemini 3 takes thinkingLevel; thinkingBudget is the 2.5 field
-            // and the API errors if the two are mixed.
-            thinkingConfig: { thinkingLevel: thinking },
+            // The level is chosen per model above — see `thinking`. Gemini 3
+            // takes thinkingLevel; thinkingBudget is the 2.5 field and the
+            // API errors if the two are mixed.
+            thinkingConfig: { thinkingLevel: levelFor(m) },
             responseMimeType: "application/json",
           },
         }),
       },
     );
 
-    if (!res.ok) {
+    // Google answers 503 "This model is currently experiencing high demand"
+    // in about a second — the failures come back far too fast to be
+    // inference — and says the spikes are brief. Failing someone's first
+    // attempt over that is the wrong trade, and worse, it tells them their
+    // words were refused when the model was merely busy.
+    const RETRYABLE = new Set([429, 500, 502, 503, 504]);
+    const ATTEMPTS = 4;
+    let res!: Response;
+    let active = model;
+    for (let attempt = 1; attempt <= ATTEMPTS; attempt++) {
+      res = await request(active);
+      if (res.ok) break;
       const errText = await res.text();
-      console.error("provider error", res.status, errText.slice(0, 300));
+      console.error("provider error", res.status, errText.slice(0, 300),
+        "model", active, "attempt", attempt + "/" + ATTEMPTS);
+      if (!RETRYABLE.has(res.status) || attempt === ATTEMPTS) break;
+      // Give the configured model one more go — spikes really are brief —
+      // then stop waiting on a queue and try the other pool.
+      if (attempt >= 2 && SIBLING[active]) active = SIBLING[active];
+      // Jittered, so a burst of visitors does not retry in lockstep and
+      // rebuild the spike they are all waiting out.
+      await new Promise((r) =>
+        setTimeout(r, 300 * attempt + Math.floor(Math.random() * 300)));
+    }
+
+    if (!res.ok) {
+      const busy = RETRYABLE.has(res.status);
       await service.from("ai_generations").insert({
         user_id: userId, visitor_id: visitor, input_text: text.slice(0, 1000),
         mood: vMood, style: vStyle, length: vLength,
-        model, status: "FAILED", duration_ms: Date.now() - started,
+        model: active, status: "FAILED", duration_ms: Date.now() - started,
       });
-      return json({ error: true, message: GENTLE_FAIL }, 502);
+      return json({ error: true, message: busy ? BUSY_FAIL : GENTLE_FAIL },
+        busy ? 503 : 502);
     }
 
     const payload = await res.json();
@@ -194,7 +229,7 @@ Deno.serve(async (req) => {
       await service.from("ai_generations").insert({
         user_id: userId, visitor_id: visitor, input_text: text.slice(0, 1000),
         mood: vMood, style: vStyle, length: vLength,
-        model, status: "BLOCKED", duration_ms: Date.now() - started,
+        model: active, status: "BLOCKED", duration_ms: Date.now() - started,
       });
       return json({ blocked: true, message });
     }
@@ -218,7 +253,7 @@ Deno.serve(async (req) => {
       await service.from("ai_generations").insert({
         user_id: userId, visitor_id: visitor, input_text: text.slice(0, 1000),
         mood: vMood, style: vStyle, length: vLength,
-        model, status: "FAILED", duration_ms: Date.now() - started,
+        model: active, status: "FAILED", duration_ms: Date.now() - started,
       });
       return json({ error: true, message: GENTLE_FAIL }, 502);
     }
@@ -227,7 +262,7 @@ Deno.serve(async (req) => {
     const { data: row } = await service.from("ai_generations").insert({
       user_id: userId, visitor_id: visitor, input_text: text.slice(0, 1000),
       mood: vMood, style: vStyle, length: vLength,
-      generated_text: quote, model, status: "SUCCESS", duration_ms: Date.now() - started,
+      generated_text: quote, model: active, status: "SUCCESS", duration_ms: Date.now() - started,
     }).select("id").single();
 
     return json({
