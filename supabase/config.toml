@@ -1,0 +1,7 @@
+# Minimal config so `supabase functions deploy ai-generate` works from the
+# repository root. The project ref is not a secret — it is the hostname of
+# every API call the site already makes in public.
+project_id = "stowxeobdtvhapkzsvaq"
+
+[functions.ai-generate]
+verify_jwt = false
