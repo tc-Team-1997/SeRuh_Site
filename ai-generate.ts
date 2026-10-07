@@ -123,7 +123,15 @@ Deno.serve(async (req) => {
           contents: [{ role: "user", parts: [{ text: userPrompt }] }],
           generationConfig: {
             temperature: Number(s.temperature ?? 0.9),
-            maxOutputTokens: 400,
+            // maxOutputTokens caps thinking AND output together, and every
+            // current Gemini Flash model thinks by default. 400 was ample for
+            // gemini-2.0-flash, which did not think at all; on 3.x the model
+            // spends the whole budget reasoning and returns finishReason
+            // MAX_TOKENS with no text — which this function could only report
+            // as "couldn't find the words". A 60-word quote is roughly 90
+            // tokens; the rest is headroom for the thinking that now happens
+            // before any of it is written.
+            maxOutputTokens: 4096,
             responseMimeType: "application/json",
           },
         }),
@@ -163,6 +171,13 @@ Deno.serve(async (req) => {
     const words = quote.split(/\s+/).filter(Boolean);
     if (words.length > s.max_output_words) quote = words.slice(0, s.max_output_words).join(" ") + "…";
     if (quote.length < 4) {
+      // Say why. A truncated candidate and a genuinely blank answer both
+      // arrive here as an empty quote; finishReason and the token counts
+      // are what separate them, and without this line the cause is
+      // invisible from the logs — which is how this stayed hidden.
+      console.error("empty generation",
+        payload?.candidates?.[0]?.finishReason ?? "no finishReason",
+        JSON.stringify(payload?.usageMetadata ?? {}));
       await service.from("ai_generations").insert({
         user_id: userId, visitor_id: visitor, input_text: text.slice(0, 1000),
         mood: vMood, style: vStyle, length: vLength,
