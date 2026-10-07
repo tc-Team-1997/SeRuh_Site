@@ -132,6 +132,16 @@ Deno.serve(async (req) => {
             // tokens; the rest is headroom for the thinking that now happens
             // before any of it is written.
             maxOutputTokens: 4096,
+            // Gemini 3 Flash defaults to thinkingLevel "medium", which for a
+            // two-line poem meant 17s, 42s and once past 120s of reasoning
+            // that never reached the quote. Raising maxOutputTokens alone
+            // made it worse — more budget simply bought more thinking.
+            //
+            // "low" is the floor here: "minimal" is rejected on 3.x Flash and
+            // thinking cannot be switched off at all. Gemini 3 takes
+            // thinkingLevel; thinkingBudget is the 2.5 field and the API errors if
+            // the two are mixed.
+            thinkingConfig: { thinkingLevel: "low" },
             responseMimeType: "application/json",
           },
         }),
