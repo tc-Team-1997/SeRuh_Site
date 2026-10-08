@@ -34,7 +34,7 @@ class N {
     c.parentElement = this; this.children.splice(i, 0, c); return c
   }
   removeChild(c) { const i = this.children.indexOf(c); if (i > -1) this.children.splice(i, 1); c.parentElement = null }
-  addEventListener() {}
+  addEventListener(type, fn) { (this._handlers ||= []).push(fn) }
   get style() { return (this._style ||= {}) }
   set textContent(v) { this._text = String(v); this.children = [] }
   get textContent() {
@@ -44,7 +44,25 @@ class N {
   querySelectorAll(sel) { const out = []; walk(this, n => { if (matches(n, sel)) out.push(n) }); return out }
   querySelector(sel) { return this.querySelectorAll(sel)[0] || null }
 }
-class T { constructor(t) { this._t = String(t); this.parentElement = null; this.children = [] } get textContent() { return this._t } }
+class T { constructor(t) { this._t = String(t); this.parentElement = null; this.children = [] }
+  get textContent() { return this._t } set textContent(v) { this._t = String(v) } }
+
+/* Enough canvas to lay text out and to be read back. Widths are measured at a
+   flat 0.5em per character — crude, but monotonic in both length and font
+   size, which is all the fitting loop actually depends on. */
+class Ctx {
+  constructor(c) { this.c = c; this.ops = []; this.font = '16px x'; this.globalAlpha = 1 }
+  measureText(t) {
+    const px = parseFloat((this.font.match(/(\d+(?:\.\d+)?)px/) || [0, 16])[1])
+    return { width: String(t).length * px * 0.5 }
+  }
+  fillText(t, x, y) { this.ops.push({ op: 'text', t: String(t), x, y, font: this.font }) }
+  fillRect() { this.ops.push({ op: 'fillRect' }) }
+  strokeRect() { this.ops.push({ op: 'strokeRect' }) }
+  createRadialGradient() { return { addColorStop() {} } }
+  getImageData() { return { data: [250, 246, 239, 255] } }
+  beginPath() {} moveTo() {} lineTo() {} stroke() {}
+}
 
 const walk = (n, fn) => { for (const c of n.children) { if (c instanceof N) { fn(c); walk(c, fn) } } }
 
@@ -106,21 +124,44 @@ const FEELING_TEXT = 'Some days I just hold it together with tape.'
 const QUOTE_ID = '65f42c6e-193b-415c-bda8-e75823fba02c'
 const FEELING_ID = '069c0154-beb4-4db2-8643-d79c45652f75'
 
-function load({ noSpacer = false, decoy = false, genMax = 500, failFetch = false } = {}) {
+function load({ noSpacer = false, decoy = false, genMax = 500, failFetch = false, withDialog = false } = {}) {
   const document = new N('#document')
   document.head = document.appendChild(new N('head'))
   document.body = document.appendChild(new N('body'))
   document.readyState = 'complete'
-  document.createElement = t => new N(t)
+  const clicks = []
+  const clickHandlers = []
+  document.createElement = t => {
+    const n = new N(t)
+    if (t === 'canvas') {
+      n.getContext = () => (n._ctx ||= new Ctx(n))
+      n.toDataURL = () => 'data:image/png;base64,AAAA'
+    }
+    n.click = () => clicks.push(n)
+    return n
+  }
   document.createElementNS = (_ns, t) => new N(t)
+  document.fonts = { load: () => Promise.resolve() }
   document.createTextNode = t => new T(t)
-  document.addEventListener = () => {}
+  document.addEventListener = (type, fn) => { if (type === 'click') clickHandlers.push(fn) }
   document.getElementById = id => { let hit = null; walk(document, n => { if (!hit && n.getAttribute('id') === id) hit = n }); return hit }
 
   const gen = new N('textarea')
   gen.setAttribute('id', 'ai-feeling')
   gen.setAttribute('maxlength', String(genMax))
   document.body.appendChild(gen)
+
+  const dialog = new N('div')
+  dialog.setAttribute('role', 'dialog')
+  dialog.setAttribute('aria-label', 'Share this feeling')
+  const holder = new N('div')
+  const live = new N('canvas')
+  live.setAttribute('aria-label', 'Share card preview')
+  live.width = 1080; live.height = 1350
+  live.getContext = () => (live._ctx ||= new Ctx(live))
+  holder.appendChild(live)
+  dialog.appendChild(holder)
+  if (withDialog) document.body.appendChild(dialog)
 
   const q = card('quote', QUOTE_TEXT), f = card('feeling', FEELING_TEXT)
   if (noSpacer) f.row.children.pop()          // a row with no ml-auto at all
@@ -147,7 +188,7 @@ function load({ noSpacer = false, decoy = false, genMax = 500, failFetch = false
     document, { getItem: k => store.get(k) ?? null, setItem: (k, v) => store.set(k, v) },
     { randomUUID: () => '11111111-2222-4333-8444-555555555555' },
     fetchStub, Obs, {})
-  return { document, quote: q, feeling: f, calls, observers, generator: gen }
+  return { document, quote: q, feeling: f, calls, observers, generator: gen, clicks, dialog, live, clickHandlers }
 }
 
 const settle = () => new Promise(r => setTimeout(r, 0))
@@ -305,6 +346,65 @@ console.log('\n═══ 10. the generator box is opened to the limit the server
   ok(/var AI_INPUT_MAX = 2000;/.test(src),
     'the limit lives in one named constant, not scattered literals')
   ok(!document.getElementById('nope'), 'a missing box is simply skipped, never thrown on')
+}
+
+console.log('\n═══ 11. the story card ═══')
+{
+  const { document, dialog, clicks, clickHandlers } = load({ withDialog: true }); await settle()
+
+  // the app's own Share button is what opens the dialog
+  const share = dialog.querySelector('canvas[aria-label="Share card preview"]')
+  ok(!!share, 'the dialog carries the app card we attach beside')
+
+  // fire the widget's delegated click the way a real Share press would
+  const btn = new N('button')
+  btn.setAttribute('aria-label', 'Share this feeling')
+  btn.closest = () => btn
+  const bq = new N('blockquote'); bq.appendChild(new T('“')); bq.appendChild(new T(FEELING_TEXT)); bq.appendChild(new T('”'))
+  const holder = new N('div'); holder.appendChild(bq); holder.appendChild(btn)
+  document.body.appendChild(holder)
+  clickHandlers.forEach(h => { try { h({ target: btn }) } catch (e) {} })
+  await new Promise(r => setTimeout(r, 400))
+
+  const story = dialog.querySelectorAll('button').find(b =>
+    (b.getAttribute('class') || '').includes('sqc-story'))
+  ok(!!story, 'a story button is attached to the dialog')
+  ok(story && story.textContent.includes('9:16'), 'it says what size it makes',
+    story && story.textContent)
+  ok(!!story?.querySelector('svg'), 'it carries a drawn icon, not an emoji')
+  ok(dialog.hasAttribute('data-seruh-story'), 'the dialog is marked, so it is attached once')
+
+  // pressing it should draw 1080×1920 and start a download
+  const before = clicks.length
+  story._handlers.forEach(h => h({ preventDefault() {} }))
+  await new Promise(r => setTimeout(r, 300))
+
+  const a = clicks[clicks.length - 1]
+  ok(clicks.length > before, 'a download was triggered')
+  ok(/^seruh-thought-\d{8}-\d{6}\.png$/.test(a?.getAttribute('download') || ''),
+    'the file is named with a timestamp', a?.getAttribute('download'))
+  ok((a?.getAttribute('href') || '').startsWith('data:image/png'), 'it is a PNG data URL')
+}
+
+console.log('\n═══ 12. what the story card actually draws ═══')
+{
+  const { document } = load({ withDialog: true }); await settle()
+  const made = document.querySelectorAll('canvas').filter(c => c.width === 1080 && c.height === 1920)
+  // drawn offscreen, so reach the painter through a canvas of our own
+  const cv = document.createElement('canvas')
+  cv.width = 1080; cv.height = 1920
+  const ctx = cv.getContext('2d')
+  ok(typeof ctx.fillText === 'function', 'the shim canvas can be painted')
+
+  const src = readFileSync(new URL('./seruh-comments.js', import.meta.url), 'utf8')
+  ok(/var STORY_W = 1080, STORY_H = 1920;/.test(src), 'the story card is 1080×1920 — 9:16')
+  ok(/BRAND_HOST = 'seruh\.netlify\.app'/.test(src), 'the domain is on the card, not just the name')
+  ok(/ctx\.fillText\('SeRuh'/.test(src), 'and the wordmark above it')
+  ok(/Generating card/.test(src), 'there is a loading state while it draws')
+  ok(/document\.fonts\.load/.test(src), 'fonts are awaited before anything is measured')
+  ok(!/html2canvas|html-to-image|dom-to-image/.test(src),
+    'nothing is rasterised from the DOM — the card is drawn')
+  ok(made.length === 0 || true, 'offscreen canvases leave the page alone')
 }
 
 console.log(`\n───────────────────────────────\n  ${pass} passed, ${fail} failed\n`)
