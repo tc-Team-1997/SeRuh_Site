@@ -28,6 +28,7 @@
   var API = 'https://stowxeobdtvhapkzsvaq.supabase.co';
   var KEY = 'sb_publishable_TolsckXYt02Y9zydXVy8ZQ_64XaJ-FO';
   var SCHEMA = 'public';            // this project's default is not `public`
+  var BRAND_HOST = 'seruh.netlify.app';   // printed on the story card
   var MARK = 'data-seruh-comments'; // so a card is only enhanced once
 
   /* Reuse the app's own visitor id, so a comment belongs to the same
@@ -92,6 +93,17 @@
     + 'border-radius:999px;min-width:1.05rem;height:1.05rem;padding:0 .26rem;'
     + 'display:inline-flex;align-items:center;justify-content:center}'
     + '.sqc-n:empty{display:none}'
+    /* Sits under the app's own card preview, so it borrows that dialog's
+       width rather than competing with the controls beside it. */
+    + '.sqc-story{display:inline-flex;align-items:center;justify-content:center;gap:.45rem;'
+    + 'width:100%;margin-top:.7rem;cursor:pointer;font-family:inherit;'
+    + 'border:1px solid #ecd5d5;background:#fdf6f5;border-radius:999px;padding:.6rem 1rem;'
+    + 'font-size:.84rem;line-height:1;color:#9a545f;'
+    + 'transition:background .3s,border-color .3s,color .3s,opacity .3s}'
+    + '.sqc-story:hover:not(:disabled){background:#f4e3e2;border-color:#d8adb1;color:#8a4753}'
+    + '.sqc-story:disabled{opacity:.6;cursor:default}'
+    + '.sqc-story:focus-visible{outline:2px solid rgba(183,110,121,.55);outline-offset:2px}'
+    + '.sqc-story svg{flex:none}'
 
     /* ── room for one more control ──────────────────────────────
        In a lg:columns-3 wall the card's inner width is about 299px
@@ -321,6 +333,20 @@
     return lines;
   }
 
+  /* The swatch the reader picked is only knowable from the pixels the app
+     already painted, so both cards read it from there rather than keeping
+     a second copy of a palette that could drift. */
+  function sampleTheme(ctx) {
+    var t = { bg: '#faf6ef', ink: '#2e2a33' };
+    try {
+      var px = ctx.getImageData(6, 6, 1, 1).data;
+      t.bg = 'rgb(' + px[0] + ',' + px[1] + ',' + px[2] + ')';
+      var dark = (px[0] * 299 + px[1] * 587 + px[2] * 114) / 1000 < 128;
+      t.ink = dark ? '#f3ece3' : '#2e2a33';
+    } catch (e) {}
+    return t;
+  }
+
   function repaintCard(text) {
     var cv = document.querySelector(CARD_SEL);
     if (!cv || !cv.width || !text) return false;
@@ -328,15 +354,7 @@
     if (!ctx) return false;
 
     var W = cv.width, H = cv.height;
-
-    // sample the theme the app just painted
-    var bg = '#faf6ef', ink = '#2e2a33';
-    try {
-      var px = ctx.getImageData(6, 6, 1, 1).data;
-      bg = 'rgb(' + px[0] + ',' + px[1] + ',' + px[2] + ')';
-      var dark = (px[0] * 299 + px[1] * 587 + px[2] * 114) / 1000 < 128;
-      ink = dark ? '#f3ece3' : '#2e2a33';
-    } catch (e) {}
+    var theme = sampleTheme(ctx), bg = theme.bg, ink = theme.ink;
 
     var padX = Math.round(W * 0.11), padTop = Math.round(H * 0.13);
     var footer = Math.round(H * 0.16);
@@ -379,6 +397,201 @@
     return true;
   }
 
+  /* ── the story card ────────────────────────────────────────────
+     The app already draws a share card, and draws it well: 1080×1350,
+     two swatches, gold rule, a decorative quote mark. 1080×1350 is the
+     feed ratio though, and a story is 9:16 — posted to a story, the
+     app's card sits in a letterbox with the platform's own furniture
+     crowding it.
+
+     So this is an addition, not a replacement. The app's card is left
+     exactly as it is; this draws a second one at 1080×1920 on a canvas
+     of its own, in whichever swatch the reader has chosen, and saves
+     it. Nothing the app does can be damaged by a canvas it never sees.
+
+     Drawn rather than rasterised. A screenshot library would photograph
+     the DOM at whatever size the viewport happens to be; a card wants
+     exact pixels, its own measure, and fonts that are known to have
+     loaded. The platform also forbids loading one, and the app has no
+     source to install it into. */
+
+  var STORY_W = 1080, STORY_H = 1920;
+
+  function stamp() {
+    var d = new Date(), p = function (n) { return (n < 10 ? '0' : '') + n; };
+    return d.getFullYear() + p(d.getMonth() + 1) + p(d.getDate()) +
+      '-' + p(d.getHours()) + p(d.getMinutes()) + p(d.getSeconds());
+  }
+
+  /* Fonts have to be in before anything is measured: a card laid out in
+     Times and painted in Cormorant wraps in the wrong places. */
+  function readyFonts() {
+    try {
+      if (!document.fonts || !document.fonts.load) return Promise.resolve();
+      return Promise.all([
+        document.fonts.load('italic 500 72px "Cormorant Garamond"'),
+        document.fonts.load('500 56px "Cormorant Garamond"'),
+        document.fonts.load('400 30px "Karla"'),
+      ]).catch(function () {});
+    } catch (e) { return Promise.resolve(); }
+  }
+
+  function drawStory(ctx, text, theme) {
+    var W = STORY_W, H = STORY_H;
+    var padX = Math.round(W * 0.12);
+    var padTop = Math.round(H * 0.20);
+    var footer = Math.round(H * 0.17);
+    var maxW = W - padX * 2, maxH = H - padTop - footer;
+
+    ctx.fillStyle = theme.bg;
+    ctx.fillRect(0, 0, W, H);
+
+    // the same two washes the app uses, placed for the taller frame
+    [[W * 0.16, H * 0.13, 560], [W * 0.86, H * 0.9, 620]].forEach(function (g) {
+      var r = ctx.createRadialGradient(g[0], g[1], 40, g[0], g[1], g[2]);
+      r.addColorStop(0, 'rgba(183,110,121,0.09)');
+      r.addColorStop(1, 'rgba(0,0,0,0)');
+      ctx.fillStyle = r;
+      ctx.fillRect(0, 0, W, H);
+    });
+
+    ctx.strokeStyle = theme.ink;
+    ctx.globalAlpha = 0.16;
+    ctx.lineWidth = 3;
+    ctx.strokeRect(54, 54, W - 108, H - 108);
+    ctx.globalAlpha = 1;
+
+    // opening mark, set behind the words rather than beside them
+    ctx.globalAlpha = 0.18;
+    ctx.fillStyle = theme.ink;
+    ctx.textAlign = 'center';
+    ctx.font = 'italic 500 210px "Cormorant Garamond", Georgia, serif';
+    ctx.fillText('“', W / 2, padTop - 40);
+    ctx.globalAlpha = 1;
+
+    // largest face that fits, then an honest ellipsis rather than overflow
+    var size = 88, lines = [], lh = 1;
+    for (; size >= 26; size -= 2) {
+      ctx.font = 'italic 500 ' + size + 'px "Cormorant Garamond", Georgia, serif';
+      lh = size * 1.44;
+      lines = wrap(ctx, text, maxW);
+      if (lines.length * lh <= maxH) break;
+    }
+    var fits = Math.floor(maxH / lh);
+    if (lines.length > fits) {
+      lines = lines.slice(0, Math.max(1, fits - 1));
+      lines.push('…');
+    }
+
+    ctx.fillStyle = theme.ink;
+    ctx.font = 'italic 500 ' + size + 'px "Cormorant Garamond", Georgia, serif';
+    var y = padTop + Math.max(0, (maxH - lines.length * lh) / 2) + lh * 0.78;
+    lines.forEach(function (l) { ctx.fillText(l, W / 2, y); y += lh; });
+
+    // a hairline above the signature, so the words end somewhere
+    ctx.globalAlpha = 0.18;
+    ctx.strokeStyle = theme.ink;
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(W / 2 - 90, H - footer + 10);
+    ctx.lineTo(W / 2 + 90, H - footer + 10);
+    ctx.stroke();
+    ctx.globalAlpha = 1;
+
+    ctx.fillStyle = theme.ink;
+    ctx.font = '500 60px "Cormorant Garamond", Georgia, serif';
+    ctx.fillText('SeRuh', W / 2, H - footer * 0.62);
+    ctx.globalAlpha = 0.62;
+    ctx.font = '400 30px Karla, ui-sans-serif, system-ui, sans-serif';
+    ctx.fillText(BRAND_HOST, W / 2, H - footer * 0.30);
+    ctx.globalAlpha = 1;
+    ctx.textAlign = 'start';
+    return true;
+  }
+
+  function saveStory(text, onState) {
+    if (!text) return Promise.resolve(false);
+    onState(true);
+    return readyFonts().then(function () {
+      var live = document.querySelector(CARD_SEL);
+      var theme = { bg: '#faf6ef', ink: '#2e2a33' };
+      if (live && live.getContext) {
+        try { theme = sampleTheme(live.getContext('2d')); } catch (e) {}
+      }
+      var cv = document.createElement('canvas');
+      cv.width = STORY_W; cv.height = STORY_H;
+      var ctx = cv.getContext('2d');
+      if (!ctx) throw new Error('no 2d context');
+      drawStory(ctx, text, theme);
+
+      var a = el('a', {
+        href: cv.toDataURL('image/png'),
+        download: 'seruh-thought-' + stamp() + '.png',
+      });
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      return true;
+    }).then(function (ok) {
+      onState(false);
+      toast(ok ? 'Story card saved ✨' : 'Couldn’t make the card here.');
+      return ok;
+    }).catch(function () {
+      onState(false);
+      toast('Couldn’t make the card here.');
+      return false;
+    });
+  }
+
+  /* The dialog is the app's, so the button is attached to it the same way
+     the Reply button is attached to a card: find it, mark it, and let the
+     observer put it back after a re-render. */
+  var STORY_MARK = 'data-seruh-story';
+
+  function addStoryButton() {
+    // Found by walking up from the card rather than by a descendant
+    // selector: the dialog's wrapper markup is the app's to change, the
+    // canvas and its aria-label are what we actually depend on.
+    var cv = document.querySelector(CARD_SEL);
+    if (!cv || !cv.parentElement) return;
+    var panel = cv.parentElement, hops = 0;
+    while (panel && hops++ < 8 && panel.getAttribute('role') !== 'dialog') {
+      panel = panel.parentElement;
+    }
+    if (!panel || panel.hasAttribute(STORY_MARK)) return;
+    panel.setAttribute(STORY_MARK, '1');
+
+    var label = document.createTextNode('Save story · 9:16');
+    var b = el('button', { class: 'sqc-story', type: 'button',
+      title: 'A 1080×1920 card, sized for stories' });
+    b.appendChild(downloadIcon());
+    b.appendChild(label);
+    b.addEventListener('click', function (e) {
+      e.preventDefault();
+      saveStory(shareText, function (busy) {
+        b.disabled = busy;
+        label.textContent = busy ? 'Generating card…' : 'Save story · 9:16';
+      });
+    });
+    cv.parentElement.appendChild(b);
+  }
+
+  /* A download glyph in the app's own icon family — lucide, 14px, stroke 2. */
+  function downloadIcon() {
+    var s = document.createElementNS(SVGNS, 'svg');
+    var a = { width: '15', height: '15', viewBox: '0 0 24 24', fill: 'none',
+      stroke: 'currentColor', 'stroke-width': '2', 'stroke-linecap': 'round',
+      'stroke-linejoin': 'round', 'aria-hidden': 'true' };
+    Object.keys(a).forEach(function (k) { s.setAttribute(k, a[k]); });
+    [ 'M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4',
+      'M7 10l5 5 5-5', 'M12 15V3' ].forEach(function (d) {
+      var p = document.createElementNS(SVGNS, 'path');
+      p.setAttribute('d', d);
+      s.appendChild(p);
+    });
+    return s;
+  }
+
   /* The app repaints on open and on every theme swatch, so retry for
      a moment and repaint again after any click inside the dialog. */
   var shareText = null;
@@ -401,6 +614,11 @@
         while (card && hops++ < 8) { bq = card.querySelector && card.querySelector('blockquote'); if (bq) break; card = card.parentElement; }
         shareText = bq ? bq.textContent.replace(/^[\s“"']+|[\s”"']+$/g, '') : null;
         chaseCard();
+        // the dialog mounts a beat after the click, so try for a moment
+        var st = 0, si = setInterval(function () {
+          try { addStoryButton(); } catch (e) {}
+          if (++st > 16 || document.querySelector('[' + STORY_MARK + ']')) clearInterval(si);
+        }, 140);
       } else if (shareText && document.querySelector(CARD_SEL)) {
         // a theme swatch or another control inside the open dialog
         setTimeout(function () { repaintCard(shareText); }, 120);
