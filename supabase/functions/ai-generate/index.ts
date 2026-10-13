@@ -123,13 +123,23 @@ Deno.serve(async (req) => {
     // rather than fixed once.
     const levelFor = (m: string) => /flash-lite/i.test(m) ? "minimal" : "low";
 
-    // Flash-Lite and Flash are separate capacity pools. When the configured
-    // one is saturated, moving across beats telling someone to come back
-    // later — the quote is a sentence, and either model writes it well.
+    // When the configured model is saturated, moving to another pool beats
+    // telling someone to come back later — the quote is a sentence, and any
+    // of these writes it well.
+    //
+    // Every id here is one that appears on Google's current model list.
+    // The previous map sent Flash-Lite to "gemini-3.5-flash", which does not
+    // exist: Google publishes gemini-3.5-flash-LITE and no plain
+    // gemini-3.5-flash. That invented name returned 404, 404 is not
+    // retryable, and so a model that was merely busy came back to the writer
+    // as though their words had been refused. An id that is not read off the
+    // list is a guess, and a guess here fails in a way that looks like
+    // something else.
     const SIBLING: Record<string, string> = {
-      "gemini-3.5-flash-lite": "gemini-3.5-flash",
+      "gemini-3.5-flash-lite": "gemini-3.1-flash-lite",
       "gemini-3.1-flash-lite": "gemini-3.5-flash-lite",
-      "gemini-3.5-flash": "gemini-3.5-flash-lite",
+      "gemini-3.8-flash": "gemini-3.6-flash",
+      "gemini-3.6-flash": "gemini-3.8-flash",
     };
     const request = (m: string) => fetch(
       `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(m)}:generateContent?key=${key}`,
@@ -174,16 +184,39 @@ Deno.serve(async (req) => {
     const ATTEMPTS = 4;
     let res!: Response;
     let active = model;
+    // Remembered because the last status is not the whole story: a sibling
+    // that turns out to be unusable would otherwise erase the fact that the
+    // configured model was only busy, and the writer would be told their
+    // words were refused.
+    let sawBusy = false;
+    let siblingDead = false;
+
     for (let attempt = 1; attempt <= ATTEMPTS; attempt++) {
       res = await request(active);
       if (res.ok) break;
       const errText = await res.text();
       console.error("provider error", res.status, errText.slice(0, 300),
         "model", active, "attempt", attempt + "/" + ATTEMPTS);
-      if (!RETRYABLE.has(res.status) || attempt === ATTEMPTS) break;
+
+      if (RETRYABLE.has(res.status)) {
+        sawBusy = true;
+      } else if (active !== model && !siblingDead) {
+        // The fallback itself is broken — a wrong id answers 404, which is
+        // not retryable and would end the whole call. Go back to the model
+        // that was actually chosen and spend what is left on it. A bad
+        // sibling must never be worse than no sibling at all.
+        console.error("sibling unusable", active, res.status, "— reverting to", model);
+        siblingDead = true;
+        active = model;
+        continue;
+      } else {
+        break;  // the configured model gave a hard error; retrying cannot help
+      }
+
+      if (attempt === ATTEMPTS) break;
       // Give the configured model one more go — spikes really are brief —
       // then stop waiting on a queue and try the other pool.
-      if (attempt >= 2 && SIBLING[active]) active = SIBLING[active];
+      if (attempt >= 2 && !siblingDead && SIBLING[active]) active = SIBLING[active];
       // Jittered, so a burst of visitors does not retry in lockstep and
       // rebuild the spike they are all waiting out.
       await new Promise((r) =>
@@ -191,7 +224,8 @@ Deno.serve(async (req) => {
     }
 
     if (!res.ok) {
-      const busy = RETRYABLE.has(res.status);
+      // Busy if anything along the way was busy — not merely the last reply.
+      const busy = RETRYABLE.has(res.status) || sawBusy;
       await service.from("ai_generations").insert({
         user_id: userId, visitor_id: visitor, input_text: text.slice(0, 1000),
         mood: vMood, style: vStyle, length: vLength,
