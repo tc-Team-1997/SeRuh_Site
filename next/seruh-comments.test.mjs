@@ -35,6 +35,9 @@ class N {
   }
   removeChild(c) { const i = this.children.indexOf(c); if (i > -1) this.children.splice(i, 1); c.parentElement = null }
   addEventListener(type, fn) { (this._handlers ||= []).push(fn) }
+  closest(sel) { let n = this; while (n) { if (n instanceof N && matches(n, sel)) return n; n = n.parentElement } return null }
+  getBoundingClientRect() { return { top: this._top ?? 0, left: 0, width: 0, height: 0 } }
+  scrollIntoView(opt) { (this._scrolled ||= []).push(opt || {}) }
   get style() { return (this._style ||= {}) }
   set textContent(v) { this._text = String(v); this.children = [] }
   get textContent() {
@@ -359,7 +362,6 @@ console.log('\n═══ 11. the story card ═══')
   // fire the widget's delegated click the way a real Share press would
   const btn = new N('button')
   btn.setAttribute('aria-label', 'Share this feeling')
-  btn.closest = () => btn
   const bq = new N('blockquote'); bq.appendChild(new T('“')); bq.appendChild(new T(FEELING_TEXT)); bq.appendChild(new T('”'))
   const holder = new N('div'); holder.appendChild(bq); holder.appendChild(btn)
   document.body.appendChild(holder)
@@ -405,6 +407,77 @@ console.log('\n═══ 12. what the story card actually draws ═══')
   ok(!/html2canvas|html-to-image|dom-to-image/.test(src),
     'nothing is rasterised from the DOM — the card is drawn')
   ok(made.length === 0 || true, 'offscreen canvases leave the page alone')
+}
+
+console.log('\n═══ 13. the menu that looked like it did nothing ═══')
+const navCase = async (href, { moves = false } = {}) => {
+  const { document, clickHandlers } = load(); await settle()
+  const target = new N('section')
+  target.setAttribute('id', 'explore')
+  target._top = 900
+  document.body.appendChild(target)
+
+  const a = new N('a')
+  a.setAttribute('href', href)
+  document.body.appendChild(a)
+
+  clickHandlers.forEach(h => { try { h({ target: a }) } catch (e) {} })
+  // the collapsing panel shifts the page for a moment, then stops
+  if (moves) { await new Promise(r => setTimeout(r, 60)); target._top = 520 }
+  await new Promise(r => setTimeout(r, 500))
+  return target
+}
+
+{
+  const t = await navCase('#explore', { moves: true })
+  ok((t._scrolled || []).length === 1, 'a section link scrolls exactly once',
+    String((t._scrolled || []).length))
+  ok(t._scrolled?.[0]?.behavior === 'smooth', 'and does it smoothly')
+}
+{
+  // the whole point: it waits for the layout to stop moving first
+  const { document, clickHandlers } = load(); await settle()
+  const target = new N('section')
+  target.setAttribute('id', 'explore'); target._top = 900
+  document.body.appendChild(target)
+  const a = new N('a'); a.setAttribute('href', '#explore'); document.body.appendChild(a)
+  clickHandlers.forEach(h => { try { h({ target: a }) } catch (e) {} })
+  // keep the page moving, the way a 320ms collapse does
+  const shifting = setInterval(() => { target._top -= 40 }, 40)
+  await new Promise(r => setTimeout(r, 300))
+  ok(!(target._scrolled || []).length,
+    'it has not scrolled while the page is still shifting',
+    String((target._scrolled || []).length))
+  clearInterval(shifting)
+  await new Promise(r => setTimeout(r, 300))
+  ok((target._scrolled || []).length === 1, 'it scrolls once the position holds still',
+    String((target._scrolled || []).length))
+}
+{
+  const t = await navCase('#/me')
+  ok(!(t._scrolled || []).length, 'a route hash is left to the app, never scrolled')
+}
+{
+  const t = await navCase('https://example.com/x')
+  ok(!(t._scrolled || []).length, 'an ordinary link is left alone')
+}
+{
+  const t = await navCase('#')
+  ok(!(t._scrolled || []).length, 'a bare # is left alone')
+}
+{
+  // a link to a section that is not on the page must not throw
+  const { document, clickHandlers } = load(); await settle()
+  const a = new N('a'); a.setAttribute('href', '#nowhere'); document.body.appendChild(a)
+  let threw = false
+  try { clickHandlers.forEach(h => h({ target: a })) } catch (e) { threw = true }
+  await new Promise(r => setTimeout(r, 200))
+  ok(!threw, 'a link to a missing section is survivable')
+}
+{
+  const src = readFileSync(new URL('./seruh-comments.js', import.meta.url), 'utf8')
+  ok(!/setTimeout\([^)]*scrollIntoView/.test(src),
+    'the scroll is not hung on a guessed animation duration')
 }
 
 console.log(`\n───────────────────────────────\n  ${pass} passed, ${fail} failed\n`)

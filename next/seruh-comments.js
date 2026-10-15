@@ -606,6 +606,12 @@
 
   document.addEventListener('click', function (e) {
     try {
+      // Nav links are anchors, not buttons, and the two are unrelated —
+      // so this never returns early. A click that is both would otherwise
+      // silently lose whichever concern happened to be checked second.
+      var link = e.target && e.target.closest ? e.target.closest('a[href]') : null;
+      if (link) handleHashLink(link);
+
       var t = e.target && e.target.closest ? e.target.closest('button') : null;
       if (!t) return;
       var label = t.getAttribute('aria-label') || '';
@@ -625,6 +631,53 @@
       }
     } catch (err) {}
   }, true);
+
+  /* ── the menu that looks like it does nothing ──────────────────
+     The mobile menu is a collapsible in normal document flow: tapping
+     an item sets it closed and Framer animates its height from auto to
+     0 over 320ms. The link is a plain <a href="#explore">, so the
+     browser performs the hash jump immediately — measuring the page
+     while the menu is still at full height. Over the next 320ms the
+     panel collapses and everything below it shifts up by however tall
+     it was, so you land past the section you asked for, and near the
+     top of the page the shift cancels the jump outright.
+
+     Tap the same item again and it is worse: the hash is already that
+     value, so the browser does nothing at all. Which is exactly how it
+     reads — "the menu closes and nothing happens".
+
+     So the scroll is done here instead, once the layout has stopped
+     moving. Waiting on a fixed timer would be a guess about animation
+     speed on a phone nobody has; waiting for the target to hold still
+     is true on any device. Route hashes are left alone — #/me and
+     #/admin change the view rather than scrolling within it. */
+
+  function settleScroll(id, tries) {
+    var target = document.getElementById(id);
+    if (!target || !target.getBoundingClientRect) return;
+    var last = null, n = 0;
+    var tick = setInterval(function () {
+      var top = Math.round(target.getBoundingClientRect().top);
+      if (last !== null && Math.abs(top - last) < 2) {
+        clearInterval(tick);
+        try { target.scrollIntoView({ behavior: 'smooth', block: 'start' }); }
+        catch (e) { target.scrollIntoView(); }
+        return;
+      }
+      last = top;
+      if (++n > (tries || 20)) {   // ~1s, then scroll anyway
+        clearInterval(tick);
+        try { target.scrollIntoView({ behavior: 'smooth', block: 'start' }); } catch (e) {}
+      }
+    }, 50);
+  }
+
+  function handleHashLink(a) {
+    var href = a.getAttribute && a.getAttribute('href');
+    if (!href || href.charAt(0) !== '#' || href.length < 2) return;
+    if (href.charAt(1) === '/') return;        // #/me and #/admin are routes
+    settleScroll(href.slice(1));
+  }
 
   /* ── attach to the cards the app renders ── */
   var maps = null;   // { quote: {text:id}, feeling: {text:id} }
